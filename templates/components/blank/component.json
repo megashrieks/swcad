@@ -1,0 +1,9 @@
+{
+  "id": "{{id}}",
+  "name": "{{name}}",
+  "version": "1.0.0",
+  "category": "custom",
+  "description": "",
+  "resizable": true,
+  "params": []
+}

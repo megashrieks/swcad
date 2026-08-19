@@ -1,0 +1,14 @@
+{
+  "id": "box",
+  "name": "Box",
+  "version": "1.0.0",
+  "category": "shapes",
+  "description": "Rectangular block with four ports, a title label and a resize handle.",
+  "resizable": true,
+  "params": [
+    { "name": "title", "type": "string", "label": "Title", "default": "Box" },
+    { "name": "fill", "type": "color", "label": "Fill", "default": "#ffffff" },
+    { "name": "stroke", "type": "color", "label": "Stroke", "default": "#2e3440" },
+    { "name": "radius", "type": "number", "label": "Corner radius", "default": 4, "min": 0, "max": 40 }
+  ]
+}

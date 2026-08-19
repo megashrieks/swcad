@@ -1,0 +1,15 @@
+{
+  "id": "base",
+  "name": "Base",
+  "version": "1.0.0",
+  "description": "Built-in primitives: boxes, circles, diamonds, notes, arrows and the sheet title block.",
+  "components": [
+    "components/box",
+    "components/circle",
+    "components/diamond",
+    "components/note",
+    "components/arrow",
+    "components/title-block"
+  ],
+  "shared": ["shared/style.js"]
+}

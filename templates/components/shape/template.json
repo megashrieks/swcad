@@ -1,0 +1,4 @@
+{
+  "name": "Shape with ports",
+  "description": "A labelled block with four ports, a fill slot and a resize handle. The usual starting point."
+}

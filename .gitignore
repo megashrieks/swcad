@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.local
+.DS_Store
+tests/e2e/*.png
+projects/demo/

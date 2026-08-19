@@ -1,0 +1,13 @@
+{
+  "id": "note",
+  "name": "Note",
+  "version": "1.0.0",
+  "category": "annotation",
+  "description": "Free text note with a folded corner and one anchor.",
+  "resizable": true,
+  "params": [
+    { "name": "text", "type": "string", "label": "Text", "default": "Note" },
+    { "name": "fill", "type": "color", "label": "Fill", "default": "#fff8dc" },
+    { "name": "stroke", "type": "color", "label": "Stroke", "default": "#b7a45a" }
+  ]
+}

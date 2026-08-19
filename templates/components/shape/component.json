@@ -1,0 +1,13 @@
+{
+  "id": "{{id}}",
+  "name": "{{name}}",
+  "version": "1.0.0",
+  "category": "custom",
+  "description": "",
+  "resizable": true,
+  "params": [
+    { "name": "title", "type": "string", "label": "Title", "default": "{{name}}" },
+    { "name": "fill", "type": "color", "label": "Fill", "default": "#ffffff" },
+    { "name": "stroke", "type": "color", "label": "Stroke", "default": "#2e3440" }
+  ]
+}

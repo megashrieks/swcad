@@ -1,0 +1,10 @@
+{
+  "frame": { "kind": "fill_slot", "name": "body" },
+  "f-title": { "kind": "label", "bind": "params.title|meta.title", "align": "start", "editable": true },
+  "f-author": { "kind": "label", "bind": "params.author|meta.author", "align": "start", "editable": true },
+  "f-date": { "kind": "label", "bind": "params.date|meta.date", "align": "start", "editable": true },
+  "f-company": { "kind": "label", "bind": "params.company|meta.company", "align": "start", "editable": true },
+  "f-rev": { "kind": "label", "bind": "params.revision|meta.revision", "align": "start", "editable": true },
+  "f-size": { "kind": "label", "bind": "params.size|meta.pageSize", "align": "start", "editable": true },
+  "f-sheet": { "kind": "label", "bind": "params.sheet|meta.sheetLabel", "align": "start", "editable": true }
+}

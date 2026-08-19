@@ -1,0 +1,44 @@
+{
+  "id": "arrow",
+  "name": "Arrow",
+  "version": "1.0.0",
+  "category": "connectors",
+  "description": "Connector that inspects the graph and routes itself around obstacles.",
+  "connector": true,
+  "resizable": false,
+  "params": [
+    {
+      "name": "style",
+      "type": "enum",
+      "label": "Routing",
+      "default": "orthogonal",
+      "options": ["orthogonal", "straight", "curve"]
+    },
+    { "name": "stroke", "type": "color", "label": "Stroke", "default": "#3b4252" },
+    {
+      "name": "strokeWidth",
+      "type": "number",
+      "label": "Width",
+      "default": 1.6,
+      "min": 0.5,
+      "max": 8,
+      "step": 0.1
+    },
+    { "name": "radius", "type": "number", "label": "Corner radius", "default": 6, "min": 0, "max": 40 },
+    { "name": "arrow", "type": "boolean", "label": "Arrow head", "default": true },
+    { "name": "startArrow", "type": "boolean", "label": "Start head", "default": false },
+    { "name": "dashed", "type": "boolean", "label": "Dashed", "default": false },
+    { "name": "avoid", "type": "boolean", "label": "Avoid components", "default": true },
+    { "name": "router", "type": "enum", "label": "Router", "default": "auto", "options": ["auto", "simple"] },
+    {
+      "name": "bendPenalty",
+      "type": "number",
+      "label": "Bend cost",
+      "default": 25,
+      "min": 0,
+      "max": 200,
+      "step": 5
+    },
+    { "name": "label", "type": "string", "label": "Label", "default": "" }
+  ]
+}

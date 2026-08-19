@@ -1,0 +1,8 @@
+{
+  "body": { "kind": "fill_slot", "name": "body" },
+  "title": { "kind": "label", "bind": "params.title", "align": "center", "editable": true },
+  "p-n": { "kind": "port", "name": "north", "direction": "in", "facing": [0, -1] },
+  "p-e": { "kind": "port", "name": "yes", "direction": "out", "facing": [1, 0] },
+  "p-s": { "kind": "port", "name": "no", "direction": "out", "facing": [0, 1] },
+  "p-w": { "kind": "port", "name": "west", "direction": "inout", "facing": [-1, 0] }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "diamond",
+  "name": "Decision",
+  "version": "1.0.0",
+  "category": "shapes",
+  "description": "Diamond decision node with four ports.",
+  "resizable": true,
+  "params": [
+    { "name": "title", "type": "string", "label": "Title", "default": "Decision?" },
+    { "name": "fill", "type": "color", "label": "Fill", "default": "#ffffff" },
+    { "name": "stroke", "type": "color", "label": "Stroke", "default": "#2e3440" }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "circle",
+  "name": "Circle",
+  "version": "1.0.0",
+  "category": "shapes",
+  "description": "Ellipse with four compass ports and a centred label.",
+  "resizable": true,
+  "params": [
+    { "name": "title", "type": "string", "label": "Title", "default": "Circle" },
+    { "name": "fill", "type": "color", "label": "Fill", "default": "#ffffff" },
+    { "name": "stroke", "type": "color", "label": "Stroke", "default": "#2e3440" }
+  ]
+}

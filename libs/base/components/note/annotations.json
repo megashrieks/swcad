@@ -1,0 +1,5 @@
+{
+  "body": { "kind": "fill_slot", "name": "body" },
+  "text": { "kind": "label", "bind": "params.text", "align": "start", "editable": true },
+  "a-left": { "kind": "anchor", "name": "left" }
+}

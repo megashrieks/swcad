@@ -1,0 +1,1017 @@
+/*
+ * Monokai Pro colour scheme: warm charcoals with six saturated accents, matching the
+ * VS Code theme of the same name so the editor and the tool sit next to each other
+ * comfortably. The drawing sheet stays paper-white - components are authored in dark
+ * ink - so overlays drawn on it use the darkened `--ink-*` members of the same palette
+ * instead of the light tones, which would disappear on white.
+ */
+:root {
+  --mk-bg-0: #19181a;
+  --mk-bg-1: #221f22;
+  --mk-bg-2: #2d2a2e;
+  --mk-bg-3: #403e41;
+  --mk-bg-4: #5b595c;
+  --mk-dim: #727072;
+  --mk-fg-2: #939293;
+  --mk-fg-1: #c1c0c0;
+  --mk-fg: #fcfcfa;
+  --mk-red: #ff6188;
+  --mk-orange: #fc9867;
+  --mk-yellow: #ffd866;
+  --mk-green: #a9dc76;
+  --mk-cyan: #78dce8;
+  --mk-purple: #ab9df2;
+
+  --bg: var(--mk-bg-1);
+  --bg-2: var(--mk-bg-2);
+  --bg-3: var(--mk-bg-3);
+  --well: var(--mk-bg-0);
+  --line: var(--mk-bg-4);
+  --text: var(--mk-fg);
+  --muted: var(--mk-fg-2);
+  --faint: var(--mk-dim);
+  --accent: var(--mk-cyan);
+  --accent-2: var(--mk-yellow);
+  --danger: var(--mk-red);
+  --ok: var(--mk-green);
+  --on-accent: var(--mk-bg-0);
+  --ring: rgba(120, 220, 232, 0.28);
+
+  /* Ink on the white sheet. */
+  --sheet: #fdfdfc;
+  --ink-accent: #128092;
+  --ink-accent-2: #c07d16;
+  --ink-ok: #4f9c2f;
+  --ink-line: #8a8580;
+  --ink-frame: #3a3639;
+  --ink-zone: #56514f;
+
+  --radius: 6px;
+  --font: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+
+  /* Native widgets - select popups, checkboxes, scrollbars - follow the theme too. */
+  color-scheme: dark;
+}
+
+/* Dark chrome deserves dark scrollbars; the sheet keeps the light default. */
+.side,
+.logs,
+.file-tabs,
+.problems {
+  scrollbar-width: thin;
+  scrollbar-color: var(--mk-bg-4) transparent;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 var(--font);
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.boot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.boot.error h1 {
+  color: var(--danger);
+  font-size: 16px;
+}
+
+/* ------------------------------------------------------------- toolbar */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 10px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.brand {
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mk-green);
+}
+
+.toolbar .group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 12px;
+  border-right: 1px solid var(--line);
+}
+
+.toolbar .group:last-of-type {
+  border-right: none;
+  padding-right: 0;
+}
+
+/* A cluster of related buttons drawn as one segmented control. */
+.btn-group {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.btn-group > * {
+  border-radius: 0;
+  position: relative;
+}
+
+/* Collapse the shared edges so neighbours read as one strip, not stacked boxes. */
+.btn-group > * + * {
+  margin-left: -1px;
+}
+
+.btn-group > *:first-child {
+  border-top-left-radius: var(--radius);
+  border-bottom-left-radius: var(--radius);
+}
+
+.btn-group > *:last-child {
+  border-top-right-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+}
+
+/* Lift the member being pointed at (or pressed) so its whole border stays visible. */
+.btn-group > .btn:hover,
+.btn-group > .btn:focus-visible,
+.btn-group > .btn.is-active {
+  z-index: 1;
+}
+
+/* A readout sitting inside a group is a segment too, not a floating label. */
+.btn-group > .zoom {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  background: var(--bg-3);
+}
+
+.toolbar .spacer {
+  flex: 1;
+}
+
+.toolbar .zoom {
+  min-width: 44px;
+  text-align: center;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar .path {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  direction: rtl;
+}
+
+.btn {
+  background: var(--bg-3);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  font: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Icon-only buttons stay square so a toolbar group reads as one control strip. */
+.btn.icon {
+  padding: 5px;
+  width: 28px;
+  height: 28px;
+  justify-content: center;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.flip-x {
+  transform: scaleX(-1);
+}
+
+.btn:hover {
+  border-color: var(--accent);
+}
+
+.btn.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.btn.primary {
+  background: var(--mk-green);
+  border-color: var(--mk-green);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.btn.primary:hover {
+  border-color: var(--mk-fg);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn.danger {
+  color: var(--danger);
+}
+
+/* ------------------------------------------------------------- layout */
+
+.editor-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 250px 1fr 290px;
+  min-height: 0;
+}
+
+.editor-layout .side {
+  background: var(--bg-2);
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.editor-layout .side.right {
+  border-right: none;
+  border-left: 1px solid var(--line);
+}
+
+.editor-layout:has(.side.wide) {
+  grid-template-columns: 250px 1fr 380px;
+}
+
+/* No selection: the inspector pane is gone and the canvas takes its width. */
+.editor-layout.no-inspector {
+  grid-template-columns: 250px 1fr;
+}
+
+.canvas-area {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--sheet);
+}
+
+/* ------------------------------------------------------------- surface */
+
+.surface {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+  user-select: none;
+  cursor: default;
+}
+
+.surface.tool-pan {
+  cursor: grab;
+}
+
+.surface.tool-place,
+.surface.tool-connect {
+  cursor: crosshair;
+}
+
+.surface .layer {
+  position: absolute;
+  inset: 0;
+}
+
+.surface .layer.content {
+  overflow: visible;
+}
+
+.node {
+  cursor: move;
+}
+
+/* Hovering a port starts a connection, not a move — say so with the cursor. */
+.surface.hover-port,
+.surface.hover-port .node,
+.surface.hover-port .connection {
+  cursor: crosshair;
+}
+
+.connection {
+  pointer-events: stroke;
+}
+
+.node.is-hover .swcad-hit,
+.connection.is-hover {
+  filter: drop-shadow(0 0 2px var(--ink-accent));
+}
+
+.selection-outline {
+  fill: none;
+  stroke: var(--ink-accent);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.connection.is-selected path,
+.connection.is-selected polyline,
+.connection.is-selected line {
+  stroke: var(--ink-accent);
+}
+
+.handle {
+  fill: #fff;
+  stroke: var(--ink-accent);
+  stroke-width: 1;
+  cursor: nwse-resize;
+  vector-effect: non-scaling-stroke;
+}
+
+.port-marker {
+  fill: #fff;
+  stroke: var(--ink-accent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  cursor: crosshair;
+}
+
+.port-marker.is-hover {
+  stroke: var(--ink-accent);
+  stroke-width: 2;
+  fill: #dff4f7;
+}
+
+.port-marker.is-connected {
+  fill: var(--ink-accent);
+}
+
+.port-marker.is-active {
+  fill: var(--accent-2);
+  stroke: var(--ink-accent-2);
+}
+
+/* A whole shape edge acting as a port: the stroke itself is connectable. */
+.port-outline {
+  fill: none;
+  stroke: var(--ink-accent);
+  stroke-width: 2;
+  stroke-dasharray: 5 3;
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.port-outline.is-connected {
+  stroke-dasharray: none;
+}
+
+.port-outline.is-hover,
+.port-outline.is-active {
+  stroke: var(--ink-accent);
+  stroke-width: 3;
+  stroke-dasharray: none;
+  opacity: 1;
+}
+
+.port-marker.is-surface {
+  fill: var(--ink-accent);
+  stroke: #fff;
+}
+
+.anchor-marker {
+  fill: none;
+  stroke: var(--ink-ok);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.marquee {
+  fill: rgba(18, 128, 146, 0.12);
+  stroke: var(--ink-accent);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.connect-preview {
+  fill: none;
+  stroke: var(--ink-accent-2);
+  stroke-width: 1.6;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Sits exactly on top of the label it edits: no padding, border or ring, so nothing
+   shifts the glyphs and nothing frames the text while you type. */
+.label-editor {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  background: #fff;
+  color: #111;
+  border: none;
+  outline: none;
+  border-radius: 0;
+  padding: 0;
+  font: inherit;
+}
+
+/* ------------------------------------------------------------- page */
+
+.page-sheet {
+  fill: none;
+  stroke: var(--ink-line);
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.page-border {
+  fill: none;
+  stroke: var(--ink-frame);
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.page-tick {
+  stroke: var(--ink-frame);
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.page-zone {
+  fill: var(--ink-zone);
+  font-size: 9px;
+  font-family: var(--font);
+}
+
+.page-frame,
+.page-legend {
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------- panels */
+
+.panel {
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--bg-3);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.panel-body {
+  padding: 8px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.row-note {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.subhead {
+  margin-top: 4px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  padding-top: 7px;
+}
+
+.input {
+  width: 100%;
+  background: var(--well);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 4px 6px;
+  font: inherit;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.input.color {
+  padding: 1px;
+  height: 26px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.check input {
+  accent-color: var(--accent);
+}
+
+.hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.hint code,
+code {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--mk-yellow);
+}
+
+.error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--danger);
+  white-space: pre-wrap;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.logs {
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+}
+
+.list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--mk-dim);
+  flex: 0 0 auto;
+}
+
+.dot.is-connected {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+
+.tag {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--well);
+  border: 1px solid var(--line);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------- library */
+
+.lib-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.lib-name {
+  display: flex;
+  align-items: center;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.lib-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.lib-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.lib-item:hover {
+  border-color: var(--accent);
+}
+
+.lib-item.is-active {
+  border-color: var(--accent-2);
+  box-shadow: inset 0 0 0 1px var(--accent-2);
+}
+
+.lib-cell {
+  position: relative;
+  display: flex;
+}
+
+.lib-cell .lib-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.lib-actions {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: none;
+  gap: 2px;
+}
+
+.lib-cell:hover .lib-actions,
+.lib-cell:focus-within .lib-actions {
+  display: flex;
+}
+
+.lib-action {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.lib-action:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.lib-action.danger:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.preview {
+  width: 100%;
+  height: 46px;
+  background: var(--sheet);
+  border-radius: 3px;
+}
+
+.preview.large {
+  height: 190px;
+}
+
+/* ------------------------------------------------------------- component editor */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px 0;
+  background: var(--bg-2);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.tab {
+  flex: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  color: var(--muted);
+  font: inherit;
+  text-transform: capitalize;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+.tab.is-active {
+  background: var(--bg-3);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+/* --------------------------------------------- component editor: split canvas */
+
+/* Live preview on top, the package files below: the component is what the files
+   say it is, so both are in view while editing. */
+.canvas-area.split {
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-pane {
+  position: relative;
+  flex: 1 1 46%;
+  min-height: 140px;
+  overflow: hidden;
+}
+
+.code-pane {
+  flex: 1 1 54%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-2);
+  border-top: 1px solid var(--line);
+}
+
+.file-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px 6px 0;
+  overflow-x: auto;
+}
+
+.file-tab {
+  display: flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  color: var(--muted);
+}
+
+.file-tab button {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+
+.file-tab.is-active {
+  background: var(--well);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.file-tab .file-close {
+  display: none;
+  padding: 4px 6px 4px 0;
+  color: var(--muted);
+}
+
+.file-tab:hover .file-close {
+  display: block;
+}
+
+.file-tab .file-close:hover {
+  color: var(--danger);
+}
+
+.file-tab.add {
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.file-editor {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+}
+
+/* Monaco brings its own colours; the frame just has to give it a height. */
+.code-editor {
+  min-height: 0;
+  overflow: hidden;
+  background: var(--well);
+  border-top: 1px solid var(--line);
+}
+
+p.file-editor.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 16px;
+  background: var(--well);
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 12px;
+  text-align: center;
+}
+
+.problems {
+  max-height: 96px;
+  overflow-y: auto;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-top: 1px solid var(--line);
+}
+
+.hint.warn,
+.tag.warn {
+  color: var(--accent-2);
+}
+
+/* ------------------------------------------- component editor: annotations */
+
+.ann-row {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  overflow: hidden;
+}
+
+.ann-row.is-missing {
+  border-color: var(--accent-2);
+}
+
+.ann-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.ann-head .spacer {
+  flex: 1;
+}
+
+.ann-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.ann-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px 8px;
+  border-top: 1px solid var(--line);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.param-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}

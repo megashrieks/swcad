@@ -1,0 +1,4 @@
+{
+  "name": "Connector",
+  "description": "A connector drawn by code: reads its two endpoints, routes around obstacles and returns SVG."
+}

@@ -1,0 +1,219 @@
+import { useEffect, useRef } from 'react';
+import type { GridConfig } from '@core/model/types';
+import type { Guide, Viewport } from '../EditorController';
+
+interface Size {
+  w: number;
+  h: number;
+}
+
+function setupCanvas(canvas: HTMLCanvasElement, size: Size): CanvasRenderingContext2D | null {
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.max(1, Math.floor(size.w * dpr));
+  const height = Math.max(1, Math.floor(size.h * dpr));
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, size.w, size.h);
+  return ctx;
+}
+
+export function GridLayer({
+  grid,
+  viewport,
+  size,
+  page,
+}: {
+  grid: GridConfig;
+  viewport: Viewport;
+  size: Size;
+  /** World-space rect of the sheet; when present the paper is painted under the grid. */
+  page?: { x: number; y: number; w: number; h: number } | null;
+}): JSX.Element {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const { tx, ty, zoom } = viewport;
+  const { w, h } = size;
+  const { size: gridSize, subdivisions, visible } = grid;
+  const { x: originX, y: originY } = grid.origin;
+  const pageX = page?.x ?? null;
+  const pageY = page?.y ?? null;
+  const pageW = page?.w ?? null;
+  const pageH = page?.h ?? null;
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = setupCanvas(canvas, { w, h });
+    if (!ctx) return;
+
+    const hasPage = pageX !== null && pageY !== null && pageW !== null && pageH !== null;
+    if (hasPage) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(pageX * zoom + tx, pageY * zoom + ty, pageW * zoom, pageH * zoom);
+    }
+
+    // The grid is the drawing lattice, not part of the paper: it keeps going past the
+    // page edge so the sheet border is the only thing marking the page region.
+    if (!visible) return;
+
+    const minor = gridSize / Math.max(1, subdivisions);
+
+    // Level of detail: skip a level whenever lines get closer than 6px.
+    let step = minor;
+    while (step * zoom < 6) step *= subdivisions > 1 ? subdivisions : 2;
+
+    const worldLeft = (0 - tx) / zoom;
+    const worldTop = (0 - ty) / zoom;
+    const worldRight = (w - tx) / zoom;
+    const worldBottom = (h - ty) / zoom;
+
+    const drawLines = (spacing: number, color: string, width: number): void => {
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      const startX = Math.floor((worldLeft - originX) / spacing) * spacing + originX;
+      for (let x = startX; x <= worldRight; x += spacing) {
+        const sx = Math.round(x * zoom + tx) + 0.5;
+        ctx.moveTo(sx, 0);
+        ctx.lineTo(sx, h);
+      }
+      const startY = Math.floor((worldTop - originY) / spacing) * spacing + originY;
+      for (let y = startY; y <= worldBottom; y += spacing) {
+        const sy = Math.round(y * zoom + ty) + 0.5;
+        ctx.moveTo(0, sy);
+        ctx.lineTo(w, sy);
+      }
+      ctx.stroke();
+    };
+
+    drawLines(step, '#ece9e6', 1);
+    const major = step * (subdivisions > 1 ? subdivisions : 4);
+    if (major * zoom >= 12) drawLines(major, '#dcd7d1', 1);
+
+    // Origin axes
+    ctx.beginPath();
+    ctx.strokeStyle = '#c8c2ba';
+    ctx.lineWidth = 1;
+    const ox = Math.round(originX * zoom + tx) + 0.5;
+    const oy = Math.round(originY * zoom + ty) + 0.5;
+    ctx.moveTo(ox, 0);
+    ctx.lineTo(ox, h);
+    ctx.moveTo(0, oy);
+    ctx.lineTo(w, oy);
+    ctx.stroke();
+  }, [tx, ty, zoom, w, h, gridSize, subdivisions, originX, originY, visible, pageX, pageY, pageW, pageH]);
+
+  return <canvas ref={ref} className="layer" style={{ width: w, height: h }} />;
+}
+
+const GUIDE_EDGE_MARGIN = 40;
+const MAX_SECONDARY_GUIDES_PER_AXIS = 40;
+
+interface ScreenGuide {
+  axis: 'x' | 'y';
+  screen: number;
+  primary: boolean;
+}
+
+/** Keep every primary guide, plus the nearest-to-centre secondaries per axis, capped. */
+function selectGuides(guides: Guide[], zoom: number, tx: number, ty: number, w: number, h: number): ScreenGuide[] {
+  const byAxis: Record<'x' | 'y', ScreenGuide[]> = { x: [], y: [] };
+  for (const guide of guides) {
+    const screen = guide.axis === 'x' ? guide.coord * zoom + tx : guide.coord * zoom + ty;
+    const bound = guide.axis === 'x' ? w : h;
+    if (screen < -GUIDE_EDGE_MARGIN || screen > bound + GUIDE_EDGE_MARGIN) continue;
+    // Guide.strength may be absent until EditorController publishes it; treat that as secondary.
+    byAxis[guide.axis].push({ axis: guide.axis, screen, primary: guide.strength === 'primary' });
+  }
+  const pick = (axis: 'x' | 'y', center: number): ScreenGuide[] => {
+    const lines = byAxis[axis];
+    const primaries = lines.filter((l) => l.primary);
+    const secondaries = lines
+      .filter((l) => !l.primary)
+      .sort((a, b) => Math.abs(a.screen - center) - Math.abs(b.screen - center))
+      .slice(0, MAX_SECONDARY_GUIDES_PER_AXIS);
+    return [...secondaries, ...primaries];
+  };
+  return [...pick('x', w / 2), ...pick('y', h / 2)];
+}
+
+export function HighlightLayer({
+  viewport,
+  size,
+  guides,
+  gridLines,
+  gridSize,
+  active,
+}: {
+  viewport: Viewport;
+  size: Size;
+  guides: Guide[];
+  gridLines: { x: number | null; y: number | null };
+  gridSize: number;
+  active: boolean;
+}): JSX.Element {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const { tx, ty, zoom } = viewport;
+  const { w, h } = size;
+  const { x: gridLineX, y: gridLineY } = gridLines;
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = setupCanvas(canvas, { w, h });
+    if (!ctx || !active) return;
+
+    // Highlighted grid row/column under the pointer, painted first as a subtle band.
+    ctx.fillStyle = 'rgba(18, 128, 146, 0.10)';
+    if (gridLineX !== null) {
+      const sx = gridLineX * zoom + tx;
+      ctx.fillRect(sx - (gridSize * zoom) / 2, 0, gridSize * zoom, h);
+    }
+    if (gridLineY !== null) {
+      const sy = gridLineY * zoom + ty;
+      ctx.fillRect(0, sy - (gridSize * zoom) / 2, w, gridSize * zoom);
+    }
+
+    const lines = selectGuides(guides, zoom, tx, ty, w, h);
+
+    const strokeLines = (subset: ScreenGuide[], color: string, width: number, dashed: boolean): void => {
+      if (subset.length === 0) return;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.setLineDash(dashed ? [5, 4] : []);
+      ctx.beginPath();
+      for (const line of subset) {
+        const at = Math.round(line.screen) + 0.5;
+        if (line.axis === 'x') {
+          ctx.moveTo(at, 0);
+          ctx.lineTo(at, h);
+        } else {
+          ctx.moveTo(0, at);
+          ctx.lineTo(w, at);
+        }
+      }
+      ctx.stroke();
+    };
+
+    // Secondaries drawn first (faint context), primaries last so the snapped guide sits on top.
+    strokeLines(
+      lines.filter((l) => !l.primary),
+      'rgba(192, 125, 22, 0.35)',
+      1,
+      false,
+    );
+    strokeLines(
+      lines.filter((l) => l.primary),
+      '#c07d16',
+      1.5,
+      true,
+    );
+    ctx.setLineDash([]);
+  }, [tx, ty, zoom, w, h, guides, gridLineX, gridLineY, gridSize, active]);
+
+  return <canvas ref={ref} className="layer" style={{ width: w, height: h }} />;
+}

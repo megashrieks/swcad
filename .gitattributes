@@ -1,0 +1,4 @@
+# The project's own files - component packages, scripts, fixtures - are read and compared
+# as text by the app and the e2e suites, so keep line endings LF everywhere.
+* text=auto eol=lf
+*.png binary

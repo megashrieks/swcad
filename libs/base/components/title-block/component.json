@@ -1,0 +1,17 @@
+{
+  "id": "title-block",
+  "name": "Title block",
+  "version": "1.1.0",
+  "category": "sheet",
+  "description": "KiCad-style legend. Every field is per-instance and falls back to the document metadata when left blank.",
+  "resizable": false,
+  "params": [
+    { "name": "title", "type": "string", "label": "Title", "default": "" },
+    { "name": "company", "type": "string", "label": "Company", "default": "" },
+    { "name": "author", "type": "string", "label": "Drawn by", "default": "" },
+    { "name": "date", "type": "string", "label": "Date", "default": "" },
+    { "name": "revision", "type": "string", "label": "Revision", "default": "" },
+    { "name": "size", "type": "string", "label": "Size", "default": "" },
+    { "name": "sheet", "type": "string", "label": "Sheet", "default": "" }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "name": "swcad",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Schematic-style diagram and flowchart editor with annotated-SVG components and scripting",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "node server/standalone.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "node tests/e2e/smoke.mjs && node tests/e2e/bugs.mjs && node tests/e2e/component-edit.mjs",
+    "test:e2e:smoke": "node tests/e2e/smoke.mjs",
+    "test:e2e:bugs": "node tests/e2e/bugs.mjs",
+    "test:e2e:components": "node tests/e2e/component-edit.mjs"
+  },
+  "dependencies": {
+    "@radix-ui/react-icons": "^1.3.2",
+    "monaco-editor": "^0.52.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "playwright": "^1.62.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
+  }
+}

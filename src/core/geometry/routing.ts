@@ -1,0 +1,609 @@
+import type { Rect, Vec } from './index';
+import { clamp, dist, inflate, rectContains, rectFromPoints, rectIntersects, rectUnion } from './index';
+import { axisOf, routeAStar } from './astar';
+
+export type RouteStyle = 'straight' | 'orthogonal' | 'curve';
+
+export interface RouteEndpoint {
+  pos: Vec;
+  /** Outward normal. Zero vector means "no preference". */
+  facing?: Vec;
+}
+
+export interface RouteOptions {
+  style?: RouteStyle;
+  /** How far the route leaves a port before turning. */
+  stub?: number;
+  obstacles?: Rect[];
+  /** Extra clearance around obstacles. */
+  clearance?: number;
+  waypoints?: Vec[];
+  /**
+   * Bounds of the node each endpoint is attached to (absent for free endpoints). Used to
+   * lengthen the exit stub past the node and to exempt that stub segment from colliding
+   * with the node it legitimately starts/ends on.
+   */
+  fromOwnerBounds?: Rect;
+  toOwnerBounds?: Rect;
+  /**
+   * `auto` (default) searches the routing lattice with A* and only falls back to the
+   * legacy candidate-shape search when no path exists; `simple` forces the legacy search.
+   */
+  router?: 'auto' | 'simple';
+  /** Cost of a corner for the A* router, in world units. Higher means straighter routes. */
+  bendPenalty?: number;
+  /**
+   * Document grid step. When set, the router first searches a lattice made of the grid
+   * lines themselves, so connectors run along the drawn grid; it falls back to the
+   * obstacle-derived lattice when no grid-aligned route exists.
+   */
+  grid?: number;
+  /** Origin the grid lines are measured from (defaults to 0,0). */
+  gridOrigin?: Vec;
+}
+
+const isZero = (v?: Vec): boolean => !v || (Math.abs(v.x) < 1e-6 && Math.abs(v.y) < 1e-6);
+
+/** Distance from `origin` (assumed inside `r`) to the nearest edge of `r` along `dir`. */
+function exitDistance(origin: Vec, dir: Vec, r: Rect): number {
+  if (isZero(dir) || !rectContains(r, origin)) return 0;
+  const l = Math.hypot(dir.x, dir.y) || 1;
+  const dx = dir.x / l;
+  const dy = dir.y / l;
+  let t = Infinity;
+  if (Math.abs(dx) > 1e-9) t = Math.min(t, dx > 0 ? (r.x + r.w - origin.x) / dx : (r.x - origin.x) / dx);
+  if (Math.abs(dy) > 1e-9) t = Math.min(t, dy > 0 ? (r.y + r.h - origin.y) / dy : (r.y - origin.y) / dy);
+  return Number.isFinite(t) ? Math.max(0, t) : 0;
+}
+
+function rectEquals(a: Rect, b: Rect, eps = 1e-6): boolean {
+  return Math.abs(a.x - b.x) < eps && Math.abs(a.y - b.y) < eps && Math.abs(a.w - b.w) < eps && Math.abs(a.h - b.h) < eps;
+}
+
+/**
+ * Distance from `origin` along `dir` at which an axis-aligned ray first enters `r`,
+ * or `null` when it never does. Origins already inside `r` return `null`: no amount of
+ * shortening gets such a ray out of the rect.
+ */
+function rayEntry(origin: Vec, dir: Vec, r: Rect): number | null {
+  const l = Math.hypot(dir.x, dir.y);
+  if (l < 1e-9) return null;
+  const dx = dir.x / l;
+  const dy = dir.y / l;
+  let enter = -Infinity;
+  let exit = Infinity;
+  if (Math.abs(dx) > 1e-9) {
+    const t1 = (r.x - origin.x) / dx;
+    const t2 = (r.x + r.w - origin.x) / dx;
+    enter = Math.max(enter, Math.min(t1, t2));
+    exit = Math.min(exit, Math.max(t1, t2));
+  } else if (origin.x < r.x || origin.x > r.x + r.w) {
+    return null;
+  }
+  if (Math.abs(dy) > 1e-9) {
+    const t1 = (r.y - origin.y) / dy;
+    const t2 = (r.y + r.h - origin.y) / dy;
+    enter = Math.max(enter, Math.min(t1, t2));
+    exit = Math.min(exit, Math.max(t1, t2));
+  } else if (origin.y < r.y || origin.y > r.y + r.h) {
+    return null;
+  }
+  if (enter > exit || exit < 0) return null;
+  return enter > 0 ? enter : null;
+}
+
+/** Clearance kept between a shortened exit stub and the obstacle that forced the cut. */
+const STUB_CLAMP_MARGIN = 1;
+
+/**
+ * Length of the exit stub. It must clear the node the endpoint sits on (`minStub`), but
+ * it must also not *end inside* some other obstacle — a stub that overshoots into a
+ * neighbouring node leaves every candidate route starting from an illegal point, and the
+ * router then has nothing clean to choose between.
+ */
+function resolveStub(origin: Vec, facing: Vec | undefined, desired: number, minStub: number, obstacles: Rect[], owner?: Rect): number {
+  if (isZero(facing) || desired <= minStub) return Math.max(desired, minStub);
+  let limit = Infinity;
+  for (const r of obstacles) {
+    if (owner && rectEquals(r, owner)) continue;
+    if (rectContains(r, origin)) continue;
+    const t = rayEntry(origin, facing!, r);
+    if (t !== null && t < limit) limit = t;
+  }
+  if (!Number.isFinite(limit)) return desired;
+  return Math.max(minStub, Math.min(desired, limit - STUB_CLAMP_MARGIN));
+}
+
+function rectCenter(r: Rect): Vec {
+  return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+}
+
+/** True if `b` lies between `a` and `c` (inclusive), used to reject reversal "collinear" triples. */
+function isBetween(a: number, b: number, c: number, eps = 1e-6): boolean {
+  return b >= Math.min(a, c) - eps && b <= Math.max(a, c) + eps;
+}
+
+function dedupePoints(points: Vec[]): Vec[] {
+  const out: Vec[] = [];
+  for (const p of points) {
+    const last = out[out.length - 1];
+    if (last && Math.abs(last.x - p.x) < 1e-6 && Math.abs(last.y - p.y) < 1e-6) continue;
+    out.push(p);
+  }
+  return out;
+}
+
+/**
+ * Drop mid points that lie on the straight line between their neighbours. Requires the
+ * mid point to be monotonically *between* its neighbours on the shared axis so a
+ * doubling-back point (e.g. an exit stub behind the path's overall direction) is never
+ * silently collapsed into a single pass-through segment.
+ */
+function simplify(points: Vec[]): Vec[] {
+  const pts = dedupePoints(points);
+  if (pts.length < 3) return pts;
+  const out: Vec[] = [pts[0]];
+  for (let i = 1; i < pts.length - 1; i += 1) {
+    const a = out[out.length - 1];
+    const b = pts[i];
+    const c = pts[i + 1];
+    const collinear =
+      (Math.abs(a.x - b.x) < 1e-6 && Math.abs(b.x - c.x) < 1e-6 && isBetween(a.y, b.y, c.y)) ||
+      (Math.abs(a.y - b.y) < 1e-6 && Math.abs(b.y - c.y) < 1e-6 && isBetween(a.x, b.x, c.x));
+    if (!collinear) out.push(b);
+  }
+  out.push(pts[pts.length - 1]);
+  return out;
+}
+
+function stubPoint(ep: RouteEndpoint, stub: number): Vec {
+  if (isZero(ep.facing)) return ep.pos;
+  const f = ep.facing!;
+  const l = Math.hypot(f.x, f.y) || 1;
+  return { x: ep.pos.x + (f.x / l) * stub, y: ep.pos.y + (f.y / l) * stub };
+}
+
+/** Elbow between two points, choosing the axis order from the exit directions. */
+function elbow(a: Vec, b: Vec, preferHorizontal: boolean): Vec[] {
+  if (Math.abs(a.x - b.x) < 1e-6 || Math.abs(a.y - b.y) < 1e-6) return [a, b];
+  return preferHorizontal ? [a, { x: b.x, y: a.y }, b] : [a, { x: a.x, y: b.y }, b];
+}
+
+function segmentHitsRect(a: Vec, b: Vec, r: Rect): boolean {
+  if (Math.abs(a.y - b.y) < 1e-6) {
+    const y = a.y;
+    if (y < r.y || y > r.y + r.h) return false;
+    const lo = Math.min(a.x, b.x);
+    const hi = Math.max(a.x, b.x);
+    return hi >= r.x && lo <= r.x + r.w;
+  }
+  if (Math.abs(a.x - b.x) < 1e-6) {
+    const x = a.x;
+    if (x < r.x || x > r.x + r.w) return false;
+    const lo = Math.min(a.y, b.y);
+    const hi = Math.max(a.y, b.y);
+    return hi >= r.y && lo <= r.y + r.h;
+  }
+  return rectContains(r, a) || rectContains(r, b);
+}
+
+interface OwnerExemption {
+  rect: Rect;
+  /** The point where the route legitimately leaves (or arrives at) this owner's bounds. */
+  stubEnd: Vec;
+}
+
+function pathCost(
+  points: Vec[],
+  obstacles: Rect[],
+  exemptFirst?: OwnerExemption,
+  exemptLast?: OwnerExemption,
+): { cost: number; collisions: number } {
+  let cost = 0;
+  let collisions = 0;
+  const lastIdx = points.length - 1;
+  for (let i = 1; i < points.length; i += 1) {
+    cost += dist(points[i - 1], points[i]);
+    const isFirst = i === 1;
+    const isLast = i === lastIdx;
+    for (const r of obstacles) {
+      let a = points[i - 1];
+      let b = points[i];
+      if (isFirst && exemptFirst && rectEquals(r, exemptFirst.rect)) {
+        // Only the stub-to-neighbour remainder is a real segment; a→stubEnd legitimately
+        // touches the owner's own bounds and must never be penalised.
+        a = exemptFirst.stubEnd;
+      } else if (isLast && exemptLast && rectEquals(r, exemptLast.rect)) {
+        b = exemptLast.stubEnd;
+      }
+      if (segmentHitsRect(a, b, r)) {
+        cost += 4000;
+        collisions += 1;
+      }
+    }
+  }
+  cost += points.length * 8;
+  return { cost, collisions };
+}
+
+/** Max number of general (non-owner) obstacles considered for geometry-derived detour lanes. */
+const MAX_LANE_OBSTACLES = 4;
+
+/** Four axis-aligned lanes that pass just outside `r`, connecting `sa` to `sb` around it. */
+function laneCandidates(sa: Vec, sb: Vec, r: Rect): Vec[][] {
+  const eps = 1;
+  const topY = r.y - eps;
+  const bottomY = r.y + r.h + eps;
+  const leftX = r.x - eps;
+  const rightX = r.x + r.w + eps;
+  return [
+    [{ x: sa.x, y: topY }, { x: sb.x, y: topY }],
+    [{ x: sa.x, y: bottomY }, { x: sb.x, y: bottomY }],
+    [{ x: leftX, y: sa.y }, { x: leftX, y: sb.y }],
+    [{ x: rightX, y: sa.y }, { x: rightX, y: sb.y }],
+  ];
+}
+
+function candidateKey(points: Vec[]): string {
+  return points.map((p) => `${Math.round(p.x * 100)},${Math.round(p.y * 100)}`).join('|');
+}
+
+/**
+ * Orthogonal (manhattan) route between two endpoints.
+ *
+ * The primary engine is an A* search over a sparse routing lattice built from the
+ * obstacles' own edges (see `astar.ts`), so a connector staircases around any arrangement
+ * of nodes instead of picking the least-bad of a few hard-coded elbow shapes. The legacy
+ * candidate search is kept as a fallback for the cases A* declines: a lattice too large to
+ * search, or genuinely enclosed endpoints where *no* clean path exists.
+ *
+ * Tightly packed (or overlapping) nodes can inflate into each other so that no route is
+ * collision-free at the requested clearance. Rather than surrender and draw straight
+ * through a box, the search is retried with progressively smaller clearances.
+ */
+export function routeOrthogonal(from: RouteEndpoint, to: RouteEndpoint, opts: RouteOptions = {}): Vec[] {
+  const baseClearance = opts.clearance ?? 8;
+  const ladder = [baseClearance];
+  if (baseClearance > 0) {
+    for (const factor of [0.5, 0.25, 0]) {
+      const value = baseClearance * factor;
+      if (!ladder.some((existing) => Math.abs(existing - value) < 1e-6)) ladder.push(value);
+    }
+  }
+
+  const useAStar = (opts.router ?? 'auto') !== 'simple';
+  const onGrid = (opts.grid ?? 0) > 0;
+  let fallback: { points: Vec[]; collisions: number } | null = null;
+  for (const clearance of ladder) {
+    if (useAStar) {
+      // Grid lanes first, so a route runs along the drawn grid wherever that is possible.
+      const snapped = onGrid ? routeWithAStar(from, to, opts, clearance, 'grid') : null;
+      if (snapped) return snapped;
+      const searched = routeWithAStar(from, to, opts, clearance, 'lanes');
+      if (searched) return searched;
+    }
+    const attempt = routeAtClearance(from, to, opts, clearance);
+    if (attempt.collisions === 0) return attempt.points;
+    if (!fallback || attempt.collisions < fallback.collisions) fallback = attempt;
+  }
+  return fallback!.points;
+}
+
+interface StubGeometry {
+  /** Obstacles inflated by the clearance in force. */
+  obstacles: Rect[];
+  fromOwner?: Rect;
+  toOwner?: Rect;
+  /** Where the route leaves the source port, and arrives at the target port. */
+  sa: Vec;
+  sb: Vec;
+}
+
+/** Stub ends and inflated obstacles, shared by both routing engines so they agree. */
+function stubGeometry(from: RouteEndpoint, to: RouteEndpoint, opts: RouteOptions, clearance: number): StubGeometry {
+  const stub = opts.stub ?? 16;
+  const obstacles = (opts.obstacles ?? []).map((r) => inflate(r, clearance));
+  const fromOwner = opts.fromOwnerBounds ? inflate(opts.fromOwnerBounds, clearance) : undefined;
+  const toOwner = opts.toOwnerBounds ? inflate(opts.toOwnerBounds, clearance) : undefined;
+
+  const a = from.pos;
+  const b = to.pos;
+  const fromMinStub = fromOwner ? exitDistance(a, from.facing ?? { x: 0, y: 0 }, fromOwner) + 1 : 0;
+  const toMinStub = toOwner ? exitDistance(b, to.facing ?? { x: 0, y: 0 }, toOwner) + 1 : 0;
+  const fromStub = resolveStub(a, from.facing, Math.max(stub, fromMinStub), fromMinStub, obstacles, fromOwner);
+  const toStub = resolveStub(b, to.facing, Math.max(stub, toMinStub), toMinStub, obstacles, toOwner);
+  return { obstacles, fromOwner, toOwner, sa: stubPoint(from, fromStub), sb: stubPoint(to, toStub) };
+}
+
+/** A* attempt at one clearance. Returns null when the lattice has no collision-free path. */
+function routeWithAStar(
+  from: RouteEndpoint,
+  to: RouteEndpoint,
+  opts: RouteOptions,
+  clearance: number,
+  mode: 'grid' | 'lanes',
+): Vec[] | null {
+  const geo = stubGeometry(from, to, opts, clearance);
+  const { obstacles, pruned } = latticeObstacles(geo);
+  const grid = mode === 'grid' ? gridLattice(geo, obstacles, opts) : null;
+  if (mode === 'grid' && !grid) return null;
+  const path = routeAStar(geo.sa, geo.sb, {
+    obstacles,
+    startAxis: axisOf(from.facing),
+    goalAxis: axisOf(to.facing),
+    startDir: from.facing,
+    goalDir: to.facing,
+    // Lines through the ports themselves and a mid lane, so the classic centre-split
+    // Z-route is always available even when no obstacle happens to sit on that line.
+    extraX: grid ? grid.xs : [from.pos.x, to.pos.x, (geo.sa.x + geo.sb.x) / 2],
+    extraY: grid ? grid.ys : [from.pos.y, to.pos.y, (geo.sa.y + geo.sb.y) / 2],
+    ...(grid
+      ? {
+          obstacleLanes: false,
+          preferX: grid.xs,
+          preferY: grid.ys,
+          offLinePenalty: Math.min(opts.grid ?? 0, opts.bendPenalty ?? DEFAULT_BEND_PENALTY) / 2,
+        }
+      : {}),
+    bendPenalty: opts.bendPenalty ?? DEFAULT_BEND_PENALTY,
+    maxNodes: MAX_LATTICE_NODES,
+  });
+  if (!path) return null;
+  // With a pruned obstacle set the path is only guaranteed clean against what the search
+  // could see, so re-check it against the obstacles that were dropped.
+  if (pruned) {
+    const dropped = geo.obstacles.filter(
+      (r) => !obstacles.includes(r) && !rectContains(r, geo.sa) && !rectContains(r, geo.sb),
+    );
+    if (crossesAny(path, dropped)) return null;
+  }
+  return simplify([from.pos, ...path, to.pos]);
+}
+
+/** Grid multiples of `step` covering [min, max], or null when that needs too many lines. */
+function gridRange(step: number, origin: number, min: number, max: number): number[] | null {
+  const first = Math.ceil((min - origin) / step - 1e-6) * step + origin;
+  const count = Math.floor((max - first) / step + 1e-6) + 1;
+  if (!Number.isFinite(count) || count < 1) return null;
+  if (count > MAX_GRID_LINES) return null;
+  const out: number[] = [];
+  for (let i = 0; i < count; i += 1) out.push(first + i * step);
+  return out;
+}
+
+/**
+ * Lattice of document grid lines around the route, plus the two stub coordinates so the
+ * ports themselves stay reachable. Null when the grid is too fine for the distance
+ * involved, in which case the caller falls back to the obstacle-derived lattice.
+ */
+function gridLattice(
+  geo: StubGeometry,
+  obstacles: Rect[],
+  opts: RouteOptions,
+): { xs: number[]; ys: number[] } | null {
+  const step = opts.grid ?? 0;
+  if (!Number.isFinite(step) || step <= 0) return null;
+  const origin = opts.gridOrigin ?? { x: 0, y: 0 };
+
+  // Start from the endpoints, then take in any obstacle that straddles that span, so the
+  // search has lanes to get around it rather than only between the ports.
+  let box = rectFromPoints(geo.sa, geo.sb);
+  box = inflate(box, step * 2);
+  for (const r of obstacles) if (rectIntersects(r, box)) box = rectUnion(box, r);
+  box = inflate(box, step * 2);
+
+  const xs = gridRange(step, origin.x, box.x, box.x + box.w);
+  const ys = gridRange(step, origin.y, box.y, box.y + box.h);
+  if (!xs || !ys) return null;
+  // The stub coordinates themselves are added by the search, which always includes its
+  // start and goal lines; keeping them out here leaves them un-preferred.
+  return { xs, ys };
+}
+
+/** Corner cost for the A* router: about two grid steps, so it prefers straight over short. */
+const DEFAULT_BEND_PENALTY = 25;
+/** Upper bound on the lattice the A* router will search (roughly 110 x 110 lines). */
+const MAX_LATTICE_NODES = 12000;
+/** Most grid lines per axis before the grid lattice is abandoned as too fine. */
+const MAX_GRID_LINES = 100;
+/** Obstacles beyond this count are pruned to the ones near the route before searching. */
+const MAX_LATTICE_OBSTACLES = 48;
+/** How far outside the endpoints' bounding box a pruned obstacle is still considered. */
+const LATTICE_MARGIN = 260;
+
+/**
+ * The obstacle set handed to the search. Dense sheets can put hundreds of nodes in the
+ * query region, which would blow the lattice up; the far ones are dropped (owners never
+ * are) and the caller re-checks the result against the full set.
+ */
+function latticeObstacles(geo: StubGeometry): { obstacles: Rect[]; pruned: boolean } {
+  if (geo.obstacles.length <= MAX_LATTICE_OBSTACLES) return { obstacles: geo.obstacles, pruned: false };
+  const box = inflate(rectFromPoints(geo.sa, geo.sb), LATTICE_MARGIN);
+  const owners = [geo.fromOwner, geo.toOwner].filter((r): r is Rect => !!r);
+  const near = geo.obstacles.filter((r) => rectIntersects(r, box) || owners.some((o) => rectEquals(o, r)));
+  if (near.length <= MAX_LATTICE_OBSTACLES) return { obstacles: near, pruned: near.length !== geo.obstacles.length };
+  const mid = { x: (geo.sa.x + geo.sb.x) / 2, y: (geo.sa.y + geo.sb.y) / 2 };
+  const ranked = [...near].sort((r1, r2) => dist(mid, rectCenter(r1)) - dist(mid, rectCenter(r2)));
+  const kept = ranked.slice(0, MAX_LATTICE_OBSTACLES);
+  for (const owner of owners) if (!kept.some((r) => rectEquals(r, owner))) kept.push(owner);
+  return { obstacles: kept, pruned: true };
+}
+
+/** True when any interior segment of `points` cuts through an obstacle. */
+function crossesAny(points: Vec[], obstacles: Rect[]): boolean {
+  for (let i = 1; i < points.length; i += 1) {
+    for (const r of obstacles) {
+      if (segmentCrossesInterior(points[i - 1], points[i], r)) return true;
+    }
+  }
+  return false;
+}
+
+/** Segment/rect interior overlap, ignoring mere contact with an edge. */
+function segmentCrossesInterior(a: Vec, b: Vec, r: Rect): boolean {
+  const eps = 1e-6;
+  if (Math.abs(a.y - b.y) < eps) {
+    if (a.y <= r.y + eps || a.y >= r.y + r.h - eps) return false;
+    return Math.min(Math.max(a.x, b.x), r.x + r.w) - Math.max(Math.min(a.x, b.x), r.x) > eps;
+  }
+  if (Math.abs(a.x - b.x) < eps) {
+    if (a.x <= r.x + eps || a.x >= r.x + r.w - eps) return false;
+    return Math.min(Math.max(a.y, b.y), r.y + r.h) - Math.max(Math.min(a.y, b.y), r.y) > eps;
+  }
+  return false;
+}
+
+function routeAtClearance(
+  from: RouteEndpoint,
+  to: RouteEndpoint,
+  opts: RouteOptions,
+  clearance: number,
+): { points: Vec[]; collisions: number } {
+  const stub = opts.stub ?? 16;
+  const { obstacles, fromOwner: fromOwnerInflated, toOwner: toOwnerInflated, sa, sb } = stubGeometry(
+    from,
+    to,
+    opts,
+    clearance,
+  );
+
+  const a = from.pos;
+  const b = to.pos;
+
+  const aHorizontal = !isZero(from.facing) ? Math.abs(from.facing!.x) >= Math.abs(from.facing!.y) : null;
+  const bHorizontal = !isZero(to.facing) ? Math.abs(to.facing!.x) >= Math.abs(to.facing!.y) : null;
+
+  const midX = (sa.x + sb.x) / 2;
+  const midY = (sa.y + sb.y) / 2;
+
+  const candidates: Vec[][] = [];
+  const wrap = (mid: Vec[]): Vec[] => simplify([a, sa, ...mid, sb, b]);
+
+  candidates.push(wrap(elbow(sa, sb, true).slice(1, -1)));
+  candidates.push(wrap(elbow(sa, sb, false).slice(1, -1)));
+  candidates.push(wrap([{ x: midX, y: sa.y }, { x: midX, y: sb.y }]));
+  candidates.push(wrap([{ x: sa.x, y: midY }, { x: sb.x, y: midY }]));
+
+  const detour = Math.max(stub * 2, 32);
+  for (const sign of [1, -1]) {
+    candidates.push(
+      wrap([
+        { x: sa.x, y: sa.y + detour * sign },
+        { x: sb.x, y: sa.y + detour * sign },
+      ]),
+    );
+    candidates.push(
+      wrap([
+        { x: sa.x + detour * sign, y: sa.y },
+        { x: sa.x + detour * sign, y: sb.y },
+      ]),
+    );
+  }
+
+  // Candidates derived from the obstacles' own geometry, so a route can go around a large
+  // node instead of merely offsetting by a small constant that a large obstacle swallows.
+  const laneRects: Rect[] = [];
+  const addLaneRect = (r?: Rect): void => {
+    if (r && !laneRects.some((existing) => rectEquals(existing, r))) laneRects.push(r);
+  };
+  addLaneRect(fromOwnerInflated);
+  addLaneRect(toOwnerInflated);
+  const mid = { x: midX, y: midY };
+  const nearest = [...obstacles]
+    .filter((r) => !laneRects.some((existing) => rectEquals(existing, r)))
+    .sort((r1, r2) => dist(mid, rectCenter(r1)) - dist(mid, rectCenter(r2)))
+    .slice(0, MAX_LANE_OBSTACLES);
+  for (const r of nearest) addLaneRect(r);
+  for (const r of laneRects) {
+    for (const lane of laneCandidates(sa, sb, r)) candidates.push(wrap(lane));
+  }
+
+  const seen = new Set<string>();
+  const uniqueCandidates = candidates.filter((candidate) => {
+    const key = candidateKey(candidate);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const fromExemption: OwnerExemption | undefined = fromOwnerInflated ? { rect: fromOwnerInflated, stubEnd: sa } : undefined;
+  const toExemption: OwnerExemption | undefined = toOwnerInflated ? { rect: toOwnerInflated, stubEnd: sb } : undefined;
+
+  let best = uniqueCandidates[0];
+  let bestCost = Infinity;
+  let bestCollisions = Infinity;
+  for (const candidate of uniqueCandidates) {
+    const scored = pathCost(candidate, obstacles, fromExemption, toExemption);
+    let cost = scored.cost;
+    // Penalise routes whose first/last segment fights the port normal.
+    if (aHorizontal !== null && candidate.length > 2) {
+      const seg = candidate[1];
+      const horizontal = Math.abs(seg.y - a.y) < 1e-6;
+      if (horizontal !== aHorizontal) cost += 300;
+    }
+    if (bHorizontal !== null && candidate.length > 2) {
+      const seg = candidate[candidate.length - 2];
+      const horizontal = Math.abs(seg.y - b.y) < 1e-6;
+      if (horizontal !== bHorizontal) cost += 300;
+    }
+    if (cost < bestCost) {
+      bestCost = cost;
+      bestCollisions = scored.collisions;
+      best = candidate;
+    }
+  }
+  return { points: best, collisions: bestCollisions };
+}
+
+export function routeStraight(from: RouteEndpoint, to: RouteEndpoint, opts: RouteOptions = {}): Vec[] {
+  return simplify([from.pos, ...(opts.waypoints ?? []), to.pos]);
+}
+
+/** Points for a curved route; the caller turns these into a smooth path. */
+export function routeCurve(from: RouteEndpoint, to: RouteEndpoint, opts: RouteOptions = {}): Vec[] {
+  const stub = opts.stub ?? Math.max(24, dist(from.pos, to.pos) * 0.25);
+  const pts = [from.pos];
+  if (!isZero(from.facing)) pts.push(stubPoint(from, stub));
+  pts.push(...(opts.waypoints ?? []));
+  if (!isZero(to.facing)) pts.push(stubPoint(to, stub));
+  pts.push(to.pos);
+  return dedupePoints(pts);
+}
+
+export function route(from: RouteEndpoint, to: RouteEndpoint, opts: RouteOptions = {}): Vec[] {
+  const style = opts.style ?? 'orthogonal';
+  if (style === 'straight') return routeStraight(from, to, opts);
+  if (style === 'curve') return routeCurve(from, to, opts);
+  if (opts.waypoints && opts.waypoints.length > 0) {
+    const pts: Vec[] = [from.pos];
+    let prev: RouteEndpoint = from;
+    const waypoints = opts.waypoints;
+    for (let i = 0; i < waypoints.length; i += 1) {
+      const wp = waypoints[i];
+      const segOpts: RouteOptions = {
+        ...opts,
+        waypoints: [],
+        fromOwnerBounds: i === 0 ? opts.fromOwnerBounds : undefined,
+        toOwnerBounds: undefined,
+      };
+      pts.push(...routeOrthogonal(prev, { pos: wp }, segOpts).slice(1));
+      prev = { pos: wp };
+    }
+    pts.push(...routeOrthogonal(prev, to, { ...opts, waypoints: [], fromOwnerBounds: undefined }).slice(1));
+    return simplify(pts);
+  }
+  return routeOrthogonal(from, to, opts);
+}
+
+/** Arrowhead polygon points for a route ending at `tip`. */
+export function arrowHead(tip: Vec, from: Vec, size = 10, spread = 0.42): Vec[] {
+  const dx = tip.x - from.x;
+  const dy = tip.y - from.y;
+  const angle = Math.atan2(dy, dx);
+  const s = clamp(size, 2, 200);
+  return [
+    tip,
+    { x: tip.x - Math.cos(angle - spread) * s, y: tip.y - Math.sin(angle - spread) * s },
+    { x: tip.x - Math.cos(angle + spread) * s, y: tip.y - Math.sin(angle + spread) * s },
+  ];
+}
