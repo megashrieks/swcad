@@ -57,7 +57,7 @@ defineComponent({
         : pts;
 
     var label = p.label === undefined || p.label === null ? '' : String(p.label);
-    var labelSize = 11;
+    var labelSize = p.labelSize === undefined ? 9 : Number(p.labelSize);
     var labelAt = null;
     // The label is not written on a plate over the line — the line steps aside for it. The
     // stroke is cut where the text sits, so the words read against the sheet itself and the
