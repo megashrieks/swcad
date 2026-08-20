@@ -6,9 +6,9 @@
  * hands this module an icon name.
  *
  * There is no drawn body and no drawn ports. A rect hugging the content is the
- * hit area, kept invisible, and a circle around it is the connectable perimeter,
- * so the symbols sit on the sheet as marks rather than as cards - put a base/box
- * behind one if a container is wanted.
+ * hit area, kept invisible, and a circle around the icon is the connectable
+ * perimeter, so the symbols sit on the sheet as marks rather than as cards - put
+ * a base/box behind one if a container is wanted.
  *
  * It is drawn from a script rather than from a static `shape.svg` for one reason:
  * static geometry is stretched by the engine on resize, with the x and y scales
@@ -156,19 +156,25 @@ defineComponent({
       );
     }
 
-    // One port encircling the whole symbol rather than four dots: a connector
-    // lands wherever it meets the circle, so there is nothing to aim at and
-    // nothing to draw. The radius takes the content box's half-diagonal, which is
-    // the smallest circle that cannot cross the drawing - a connector never ends
-    // up sitting on the icon or in the middle of the label. The editor draws the
-    // ring itself while the connect tool is armed, so this stays transparent.
-    var portR = Math.sqrt(boxW * boxW + boxH * boxH) / 2;
+    // One port encircling the symbol rather than four dots: a connector lands
+    // wherever it meets the circle, so there is nothing to aim at and nothing to
+    // draw. The editor draws the ring itself while the connect tool is armed,
+    // which is why this is transparent.
+    //
+    // The ring belongs to the icon, not to the label: sizing it to the whole
+    // content let a long title blow it out sideways, which pushed the attach
+    // points a long way from the thing they were pointing at. The radius is the
+    // glyph box's half-diagonal, the smallest circle that cannot cross the icon
+    // whatever shape it is. A label-only symbol has no glyph to hug, so it falls
+    // back to the content box.
+    var ringR = glyph > 0 ? (glyph * Math.SQRT2) / 2 : Math.sqrt(boxW * boxW + boxH * boxH) / 2;
+    var ringY = glyph > 0 ? top + glyph / 2 : h / 2;
     children.push(
       svg.circle({
         id: 'edge',
         cx: r2(w / 2),
-        cy: r2(h / 2),
-        r: r2(portR),
+        cy: r2(ringY),
+        r: r2(ringR),
         fill: 'none',
         stroke: 'transparent',
       }),
