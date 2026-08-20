@@ -14,6 +14,8 @@ import { outlineAttach, outlinePath } from '@core/geometry/outline';
 import type { Change } from '@core/model/store';
 import { bindTarget } from '@core/model/bind';
 import { resolveAnnotations } from '@core/model/annotations';
+import { LINE_SPACING as MD_LINE_SPACING } from '@core/text/markdown';
+import { measureVertical, measureWidth } from '@core/text/measure';
 import type { ResolvedNodeInfo } from '@core/model/graph';
 import { pickGroupMember, portGroupIds } from '@core/model/graph';
 import type { Node } from '@core/model/types';
@@ -1007,12 +1009,27 @@ function LabelEditor({
   // result occupies, and Enter is a line break rather than "done".
   if (annotation.markdown) {
     const lines = value.split('\n');
-    const cols = Math.max(...lines.map((line) => line.length), 12);
-    const width = Math.max(labelBox ? labelBox.w * zoom : 0, cols * fontSize * 0.6) + fontSize;
-    const height = Math.max(labelBox ? labelBox.h * zoom : 0, lines.length * fontSize * 1.35) + fontSize * 0.5;
+    // Sized from the source, not from the rendered block: a heading draws much wider than
+    // the `# ` that produced it, and a box sized for the drawing would be clamped away
+    // from the text it is meant to sit on.
+    const spec = {
+      family: fontFamily ?? 'sans-serif',
+      size: fontSize,
+      weight: String(fontWeight ?? 400),
+      style: fontStyle ?? 'normal',
+      letterSpacing: 0,
+    };
+    const metrics = measureVertical(spec);
+    const lineHeight = fontSize * MD_LINE_SPACING;
+    const width = Math.max(...lines.map((line) => measureWidth(line, spec)), fontSize * 4) + fontSize * 0.6;
+    const height = lines.length * lineHeight + metrics.descent;
     const corner = labelBox
       ? controller.toScreen({ x: labelBox.x, y: labelBox.y })
       : controller.toScreen({ x: info.bounds.x, y: info.bounds.y });
+    // A laid-out block puts its first baseline one ascent below its top, while a textarea
+    // centres the font box in the line box first. Lift by the difference so the source
+    // starts on the same line the drawn text did.
+    const lead = (lineHeight - (metrics.ascent + metrics.descent)) / 2;
     return (
       <textarea
         className="label-editor is-markdown"
@@ -1020,12 +1037,16 @@ function LabelEditor({
         value={value}
         spellCheck={false}
         style={{
-          left: Math.min(Math.max(0, corner.x - fontSize * 0.35), Math.max(0, surfaceSize.w - width)),
-          top: Math.min(Math.max(0, corner.y - fontSize * 0.3), Math.max(0, surfaceSize.h - height)),
+          left: Math.min(Math.max(0, corner.x), Math.max(0, surfaceSize.w - width)),
+          top: Math.min(Math.max(0, corner.y - lead), Math.max(0, surfaceSize.h - height)),
           width,
           height,
           fontSize,
-          lineHeight: `${fontSize * 1.35}px`,
+          fontFamily,
+          fontWeight,
+          fontStyle,
+          color: override?.fill ?? style?.color,
+          lineHeight: `${lineHeight}px`,
         }}
         onChange={(e) => setValue(e.target.value)}
         onBlur={commit}

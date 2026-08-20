@@ -71,7 +71,7 @@ export interface MdLayout {
 
 const HEADING_SCALE = [1.75, 1.5, 1.3, 1.15, 1.05, 1];
 /** Baseline-to-baseline distance, as a multiple of the line's own font size. */
-const LINE_SPACING = 1.35;
+export const LINE_SPACING = 1.35;
 /** A blank line is a paragraph break, not a full empty line of text. */
 const BLANK_SPACING = 0.6;
 const INDENT_EM = 1.5;

@@ -575,18 +575,19 @@ body {
   font: inherit;
 }
 
-/* Markdown is edited as source, so unlike an inline label it is deliberately visible
-   as a panel rather than pretending to be the drawn text. */
+/* A textarea rather than an input, but the same idea: it sits on the text it is editing
+   with nothing to frame it. Markdown is typed as source, so what is under the caret is not
+   always what was drawn there — the font, size and colour still match, so it reads as the
+   same text rather than as a dialog about it. */
 .label-editor.is-markdown {
-  padding: 4px 6px;
-  border: 1px solid var(--accent);
-  border-radius: 4px;
-  background: #fff;
-  box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
-  font-family: 'JetBrains Mono', Consolas, monospace;
   resize: none;
   white-space: pre;
   overflow: auto;
+  scrollbar-width: none;
+}
+
+.label-editor.is-markdown::-webkit-scrollbar {
+  display: none;
 }
 
 /* ------------------------------------------------------------- page */
