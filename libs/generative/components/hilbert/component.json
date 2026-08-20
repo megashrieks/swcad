@@ -1,0 +1,16 @@
+{
+  "id": "hilbert",
+  "name": "Hilbert curve",
+  "version": "1.0.0",
+  "category": "generative",
+  "description": "A space-filling curve. One unbroken line visits every cell of a 2^n grid without ever crossing itself, and each order folds the previous one into a quarter of the frame.",
+  "resizable": true,
+  "defaultSize": { "w": 320, "h": 320 },
+  "params": [
+    { "name": "order", "type": "number", "label": "Order", "default": 5, "min": 1, "step": 1 },
+    { "name": "padding", "type": "number", "label": "Padding", "default": 8, "min": 0, "step": 1 },
+    { "name": "stroke", "type": "color", "label": "Line", "default": "var(--sw-ink)" },
+    { "name": "strokeWidth", "type": "number", "label": "Line width", "default": 2, "min": 0.1, "step": 0.5 },
+    { "name": "colorful", "type": "boolean", "label": "Colour by distance", "default": false }
+  ]
+}

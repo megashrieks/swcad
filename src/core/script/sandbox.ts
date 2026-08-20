@@ -112,6 +112,12 @@ export function compileScript(source: string, host: SandboxHost): CompiledScript
 export interface CallResult<T> {
   value: T | null;
   error: string | null;
+  /**
+   * A hook that ran to completion but overran its time budget. Its output is still
+   * correct and still used, so this is reported apart from `error` — an expensive
+   * generative component is slow, not broken.
+   */
+  warning: string | null;
   ms: number;
 }
 
@@ -121,16 +127,22 @@ export function callHook<T>(
   ctx: unknown,
   budgetMs: number,
 ): CallResult<T> {
-  if (typeof fn !== 'function') return { value: null, error: null, ms: 0 };
+  if (typeof fn !== 'function') return { value: null, error: null, warning: null, ms: 0 };
   const started = performanceNow();
   try {
     const value = fn(ctx) as T;
     const ms = performanceNow() - started;
-    return { value, error: ms > budgetMs ? `hook exceeded ${budgetMs}ms budget (${ms.toFixed(1)}ms)` : null, ms };
+    return {
+      value,
+      error: null,
+      warning: ms > budgetMs ? `slow: ${ms.toFixed(1)}ms (budget ${budgetMs}ms)` : null,
+      ms,
+    };
   } catch (err) {
     return {
       value: null,
       error: err instanceof Error ? err.message : String(err),
+      warning: null,
       ms: performanceNow() - started,
     };
   }

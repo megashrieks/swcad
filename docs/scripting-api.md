@@ -134,8 +134,28 @@ out. When no grid-aligned route exists, the search falls back to the obstacle la
 ## `require`
 
 `require('lib:style')` loads `shared/style.js` from the component's own library;
-`require('other:helpers')` loads it from another library. A shared module assigns to `module.exports`
-or `exports` and gets `svg` and `geometry` in scope.
+`require('other:helpers')` loads it from another library.
+
+A shared module is compiled by the same sandbox as a component, so it **exports by calling
+`defineComponent`** — there is no `module` or `exports` binding. Whatever object it passes is what
+`require` returns, and it gets `svg`, `geometry`, `route` and `require` in scope:
+
+```js
+// libs/base/shared/style.js
+defineComponent({
+  applyFill: function (params) {
+    return { fill: params.fill || 'var(--sw-surface)', stroke: params.stroke || 'var(--sw-ink)' };
+  },
+});
+```
+
+```js
+// any component in libs/base
+var style = require('lib:style');
+```
+
+Every file under a library's `shared/` directory is loaded, whether or not the manifest lists it;
+listing it in `library.json`'s `shared` array is documentation for the reader.
 
 ## Hook contracts
 
@@ -215,3 +235,14 @@ defineComponent({
   script-to-script cross-references settle on the *next* frame.
 - Scripts must be pure and synchronous. There is no I/O, no timers and no persistent state
   between invocations; keep everything derived from `ctx`.
+- There is no `Math.random`. A generative component needs a seeded generator so the same document
+  always draws the same picture — see `libs/generative/shared/random.js`, which every component in
+  that library loads with `require('lib:random')`.
+- A script that returns nodes bypasses `scaleGeometry`: its output is used verbatim. A `resizable`
+  scripted component must therefore draw to `ctx.size` itself rather than expect the engine to
+  stretch it.
+- Palette thumbnails are drawn from `shape.svg`, never by running the script. A scripted component
+  with no `shape.svg` shows a blank tile.
+- A hook that runs longer than the script budget (8ms) is reported as a *warning* in the inspector,
+  not an error. Its output is still used and cached, so an expensive generative component is slow,
+  not broken.

@@ -1,7 +1,23 @@
 {
   "id": "generative",
   "name": "Generative",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Components with no stored drawing: give them a size and a seed and they draw themselves.",
-  "components": ["components/maze"]
+  "components": [
+    "components/maze",
+    "components/hilbert",
+    "components/harmonograph",
+    "components/attractor",
+    "components/phyllotaxis",
+    "components/flow-field",
+    "components/contours",
+    "components/ridgeline",
+    "components/truchet",
+    "components/ten-print",
+    "components/isometric",
+    "components/mondrian",
+    "components/circle-packing",
+    "components/lowpoly"
+  ],
+  "shared": ["shared/random.js"]
 }

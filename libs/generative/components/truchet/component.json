@@ -1,0 +1,18 @@
+{
+  "id": "truchet",
+  "name": "Truchet tiles",
+  "version": "1.0.0",
+  "category": "generative",
+  "description": "One tile, dropped into a grid at a random turn each time. Nothing joins anything on purpose, yet the arcs run into each other and long looping paths appear out of nowhere.",
+  "resizable": true,
+  "defaultSize": { "w": 360, "h": 360 },
+  "params": [
+    { "name": "seed", "type": "number", "label": "Seed", "default": 2, "step": 1 },
+    { "name": "cols", "type": "number", "label": "Columns", "default": 10, "min": 1, "step": 1 },
+    { "name": "rows", "type": "number", "label": "Rows", "default": 10, "min": 1, "step": 1 },
+    { "name": "variant", "type": "enum", "label": "Tile", "default": "arcs", "options": ["arcs", "diagonals", "triangles"] },
+    { "name": "stroke", "type": "color", "label": "Ink", "default": "var(--sw-ink)" },
+    { "name": "strokeWidth", "type": "number", "label": "Line width", "default": 3, "min": 0.1, "step": 0.5 },
+    { "name": "colorful", "type": "boolean", "label": "Colour the tiles", "default": false }
+  ]
+}

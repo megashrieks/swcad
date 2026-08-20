@@ -883,6 +883,14 @@ code {
   white-space: pre-wrap;
 }
 
+/* A script that worked but overran its time budget: advisory, not a failure. */
+.warning {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
 .muted {
   color: var(--muted);
 }

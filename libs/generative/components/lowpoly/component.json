@@ -1,0 +1,19 @@
+{
+  "id": "lowpoly",
+  "name": "Low poly",
+  "version": "1.0.0",
+  "category": "generative",
+  "description": "A jittered mesh of triangles, each one flat-shaded from a noise field. Faceted, like a paper model of a landscape nobody folded.",
+  "resizable": true,
+  "defaultSize": { "w": 420, "h": 300 },
+  "params": [
+    { "name": "seed", "type": "number", "label": "Seed", "default": 9, "step": 1 },
+    { "name": "cols", "type": "number", "label": "Columns", "default": 12, "min": 1, "step": 1 },
+    { "name": "rows", "type": "number", "label": "Rows", "default": 9, "min": 1, "step": 1 },
+    { "name": "jitter", "type": "number", "label": "Jitter", "default": 0.4, "min": 0, "step": 0.05 },
+    { "name": "scale", "type": "number", "label": "Shading scale", "default": 1.8, "min": 0.1, "step": 0.1 },
+    { "name": "stroke", "type": "color", "label": "Facet edge", "default": "" },
+    { "name": "strokeWidth", "type": "number", "label": "Edge width", "default": 1, "min": 0, "step": 0.1 },
+    { "name": "colors", "type": "string", "label": "Palette", "default": "" }
+  ]
+}

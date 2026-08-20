@@ -1,0 +1,19 @@
+{
+  "id": "contours",
+  "name": "Contours",
+  "version": "1.0.0",
+  "category": "generative",
+  "description": "A contour map of a landscape that was never surveyed. Marching squares traces the level lines of a noise field, one closed loop per height.",
+  "resizable": true,
+  "defaultSize": { "w": 420, "h": 300 },
+  "params": [
+    { "name": "seed", "type": "number", "label": "Seed", "default": 11, "step": 1 },
+    { "name": "levels", "type": "number", "label": "Levels", "default": 12, "min": 1, "step": 1 },
+    { "name": "resolution", "type": "number", "label": "Resolution", "default": 60, "min": 2, "step": 5 },
+    { "name": "scale", "type": "number", "label": "Terrain scale", "default": 2.4, "min": 0.1, "step": 0.1 },
+    { "name": "octaves", "type": "number", "label": "Detail", "default": 4, "min": 1, "step": 1 },
+    { "name": "stroke", "type": "color", "label": "Line", "default": "var(--sw-ink)" },
+    { "name": "strokeWidth", "type": "number", "label": "Line width", "default": 1, "min": 0.1, "step": 0.1 },
+    { "name": "colorful", "type": "boolean", "label": "Colour by height", "default": false }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "id": "isometric",
+  "name": "Isometric stacks",
+  "version": "1.0.0",
+  "category": "generative",
+  "description": "A city of cubes on an isometric grid, stacked to a noise-driven skyline. Three faces, three shades, and a painter's-algorithm draw order doing all the work of a depth buffer.",
+  "resizable": true,
+  "defaultSize": { "w": 400, "h": 320 },
+  "params": [
+    { "name": "seed", "type": "number", "label": "Seed", "default": 4, "step": 1 },
+    { "name": "cols", "type": "number", "label": "Columns", "default": 9, "min": 1, "step": 1 },
+    { "name": "rows", "type": "number", "label": "Rows", "default": 9, "min": 1, "step": 1 },
+    { "name": "height", "type": "number", "label": "Max stack", "default": 5, "min": 1, "step": 1 },
+    { "name": "scale", "type": "number", "label": "Skyline scale", "default": 1.6, "min": 0.1, "step": 0.1 },
+    { "name": "fill", "type": "color", "label": "Cube", "default": "var(--sw-accent)" },
+    { "name": "shade", "type": "color", "label": "Shadow", "default": "var(--sw-ink)" },
+    { "name": "shading", "type": "number", "label": "Shading", "default": 1, "min": 0, "step": 0.1 },
+    { "name": "stroke", "type": "color", "label": "Edge", "default": "var(--sw-paper)" },
+    { "name": "strokeWidth", "type": "number", "label": "Edge width", "default": 0.6, "min": 0, "step": 0.2 },
+    { "name": "colorful", "type": "boolean", "label": "Colour by height", "default": false }
+  ]
+}

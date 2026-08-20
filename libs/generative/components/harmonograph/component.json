@@ -1,0 +1,20 @@
+{
+  "id": "harmonograph",
+  "name": "Harmonograph",
+  "version": "1.0.0",
+  "category": "generative",
+  "description": "The figure a pair of decaying pendulums draws. Four sine waves, two per axis, slightly out of tune with each other so the loop never quite closes and the trace precesses as it fades.",
+  "resizable": true,
+  "defaultSize": { "w": 360, "h": 360 },
+  "params": [
+    { "name": "seed", "type": "number", "label": "Seed", "default": 7, "step": 1 },
+    { "name": "cycles", "type": "number", "label": "Cycles", "default": 32, "min": 1, "step": 1 },
+    { "name": "samples", "type": "number", "label": "Samples", "default": 3000, "min": 32, "step": 100 },
+    { "name": "damping", "type": "number", "label": "Damping", "default": 0.006, "min": 0, "step": 0.001 },
+    { "name": "detune", "type": "number", "label": "Detune", "default": 0.02, "min": 0, "step": 0.005 },
+    { "name": "padding", "type": "number", "label": "Padding", "default": 10, "min": 0, "step": 1 },
+    { "name": "stroke", "type": "color", "label": "Line", "default": "var(--sw-accent)" },
+    { "name": "strokeWidth", "type": "number", "label": "Line width", "default": 0.8, "min": 0.1, "step": 0.1 },
+    { "name": "opacity", "type": "number", "label": "Opacity", "default": 0.8, "min": 0.02, "step": 0.05 }
+  ]
+}

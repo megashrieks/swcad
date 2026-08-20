@@ -1,0 +1,21 @@
+{
+  "id": "flow-field",
+  "name": "Flow field",
+  "version": "1.0.0",
+  "category": "generative",
+  "description": "Particles dropped into a noise field and left to drift. Each one follows the local angle step by step, and where the field bunches up the traces braid together.",
+  "resizable": true,
+  "defaultSize": { "w": 420, "h": 300 },
+  "params": [
+    { "name": "seed", "type": "number", "label": "Seed", "default": 3, "step": 1 },
+    { "name": "lines", "type": "number", "label": "Traces", "default": 260, "min": 1, "step": 10 },
+    { "name": "steps", "type": "number", "label": "Steps", "default": 70, "min": 2, "step": 5 },
+    { "name": "stepLength", "type": "number", "label": "Step length", "default": 5, "min": 0.2, "step": 0.5 },
+    { "name": "scale", "type": "number", "label": "Field scale", "default": 2.6, "min": 0.1, "step": 0.1 },
+    { "name": "turns", "type": "number", "label": "Turns", "default": 2, "min": 0.1, "step": 0.25 },
+    { "name": "stroke", "type": "color", "label": "Trace", "default": "var(--sw-ink)" },
+    { "name": "strokeWidth", "type": "number", "label": "Trace width", "default": 0.9, "min": 0.1, "step": 0.1 },
+    { "name": "opacity", "type": "number", "label": "Opacity", "default": 0.55, "min": 0.02, "step": 0.05 },
+    { "name": "colorful", "type": "boolean", "label": "Colour by angle", "default": false }
+  ]
+}

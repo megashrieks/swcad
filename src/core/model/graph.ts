@@ -200,6 +200,8 @@ export interface ResolvedNodeInfo {
   styles: Record<string, Record<string, string>>;
   hitAreas: string[];
   error: string | null;
+  /** A script that worked but overran its time budget. Advisory only. */
+  warning: string | null;
   logs: string[];
 }
 
@@ -210,6 +212,7 @@ export interface ResolvedConnectionInfo {
   vnodes: VNode[];
   bounds: Rect;
   error: string | null;
+  warning: string | null;
 }
 
 export interface ResolvedGraph {
@@ -424,7 +427,7 @@ export class GraphEngine {
   private tracker = new DependencyTracker();
   private scripts = new Map<string, CompiledScript>();
   private staticCache = new Map<string, { vnodes: VNode[]; bounds: Rect; scaleX: number; scaleY: number }>();
-  private renderCache = new Map<string, { vnodes: VNode[]; styles: Record<string, Record<string, string>>; ports: unknown; logs: string[]; error: string | null }>();
+  private renderCache = new Map<string, { vnodes: VNode[]; styles: Record<string, Record<string, string>>; ports: unknown; logs: string[]; error: string | null; warning: string | null }>();
   private dirty = new Set<string>();
   private dirtyAll = true;
   private lastGraph: ResolvedGraph | null = null;
@@ -696,6 +699,7 @@ export class GraphEngine {
         styles: {},
         hitAreas: [],
         error: info.entry ? null : `unknown component '${info.node.componentRef}'`,
+        warning: null,
         logs: [],
       };
       nodes.set(id, resolved);
@@ -803,6 +807,7 @@ export class GraphEngine {
             resolved.styles = { ...resolved.styles, ...cached.styles };
             resolved.logs = cached.logs;
             resolved.error = cached.error;
+            resolved.warning = cached.warning;
             if (Array.isArray(cached.ports)) applyDynamicPorts(resolved, cached.ports as DynamicPort[], local, portConnections);
           } else {
             const logs: string[] = [];
@@ -821,10 +826,12 @@ export class GraphEngine {
             const vnodes = normalizeRender(result.rendered.value);
             const styles = result.styled.value?.slots ?? {};
             const error = result.rendered.error ?? result.styled.error ?? result.ports.error;
+            const warning = result.rendered.warning ?? result.styled.warning ?? result.ports.warning;
             if (vnodes.length > 0) resolved.vnodes = vnodes;
             resolved.styles = { ...resolved.styles, ...styles };
             resolved.logs = logs;
             if (error) resolved.error = error;
+            if (warning) resolved.warning = warning;
             if (Array.isArray(result.ports.value)) {
               applyDynamicPorts(resolved, result.ports.value, local, portConnections);
             }
@@ -834,6 +841,7 @@ export class GraphEngine {
               ports: result.ports.value,
               logs,
               error: error ?? null,
+              warning: warning ?? null,
             });
             this.dirty.delete(cacheKey);
           }
@@ -1272,6 +1280,7 @@ export class GraphEngine {
     let vnodes: VNode[] = [];
     let points: Vec[] = [];
     let error = from.error ?? to.error ?? null;
+    let warning: string | null = null;
 
     if (compiled && !compiled.error && compiled.module.render) {
       this.routingOwners = { from: fromOwnerBounds, to: toOwnerBounds };
@@ -1281,6 +1290,7 @@ export class GraphEngine {
       this.routingGrid = null;
       vnodes = normalizeRender(result.value);
       if (result.error) error = error ?? result.error;
+      warning = result.warning;
       points = extractRoutePoints(vnodes, from.pos, to.pos);
     }
     if (vnodes.length === 0) {
@@ -1304,6 +1314,7 @@ export class GraphEngine {
       vnodes,
       bounds: { x: box.x - 12, y: box.y - 12, w: box.w + 24, h: box.h + 24 },
       error,
+      warning,
     };
   }
 }

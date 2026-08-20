@@ -323,6 +323,7 @@ export function InspectorPanel({
           {describeEndpoint(conn.conn.from)} → {describeEndpoint(conn.conn.to)}
         </div>
         {conn.error && <p className="error">{conn.error}</p>}
+        {conn.warning && <p className="warning">{conn.warning}</p>}
       </Panel>
     );
   }
@@ -430,6 +431,7 @@ export function InspectorPanel({
         </>
       )}
       {info.error && <p className="error">{info.error}</p>}
+      {info.warning && <p className="warning">{info.warning}</p>}
     </Panel>
   );
 }
