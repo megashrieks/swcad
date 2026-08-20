@@ -331,6 +331,13 @@ Declare a **`hit_area`** to say otherwise: a component with one is handed to the
 single solid box, whatever it happens to be drawn from. That is the right answer for anything
 whose inside is meant to read as filled even when it is drawn hollow.
 
+**Captions block on their own account.** A route has to be let through whatever rect its port
+sits inside, or it could never arrive — and for a component whose port is drawn within its own
+outline that is the entire node, which is how an arrow ended up landing across the very name it
+was pointing at. Each label is therefore handed over as a rect in its own right, with a few
+pixels of padding: the port is not inside it, so it goes on blocking while the node around it
+stands aside.
+
 Which nodes count as "nearby" is not a fixed radius. The search starts from a band around the
 straight line between the two ports, and then **grows to include whatever it finds**: every
 obstacle inside the band widens the region to that obstacle's full extent, and the region is

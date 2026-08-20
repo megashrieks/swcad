@@ -406,6 +406,15 @@ export function toWorldOutline(outline: Outline | null, t: Transform): Outline |
 const ROUTE_QUERY_MARGIN = 80;
 
 /**
+ * Breathing room kept around a caption the router has been told to avoid.
+ *
+ * Clearance proper is shared out against the node that owns the endpoint, and a label sits
+ * inside that node, so the pinch calculation hands it none - without a little padding of its
+ * own a route would be free to graze the letters.
+ */
+const LABEL_GUARD = 3;
+
+/**
  * World-space box of each drawn primitive of a node. Falls back to the node's own bounds
  * for a component with nothing drawn in it.
  */
@@ -865,7 +874,7 @@ export class GraphEngine {
             });
             this.dirty.delete(cacheKey);
           }
-          if (resolved.vnodes !== info.vnodes) collectFromScript(resolved, def, local, portConnections, id);
+          if (resolved.vnodes !== info.vnodes) collectFromScript(resolved, def, local, portConnections, id, labelLocal);
         }
       }
 
@@ -1193,6 +1202,18 @@ export class GraphEngine {
           // one solid thing whatever it happens to be drawn from.
           if (info.hitAreas.length > 0) obstacles.push(info.bounds);
           else for (const part of info.parts) obstacles.push(part.bounds);
+          /*
+           * Captions block too, and they are pushed separately rather than left to be
+           * covered by the node's box, because the box is not always in force. A route
+           * ending on this node is allowed through whatever rect its port sits inside -
+           * otherwise it could never arrive - and for a component whose port is drawn
+           * within its own outline that exemption is the whole node. That is what let an
+           * arrow approach a software symbol from below and land across its own name. A
+           * label is its own rect, the port is not inside it, so it keeps blocking.
+           */
+          for (const box of Object.values(info.labelBoxes)) {
+            if (box.w > 0 && box.h > 0) obstacles.push(inflate(box, LABEL_GUARD));
+          }
           const wider = rectUnion(region, inflate(info.bounds, ROUTE_QUERY_MARGIN));
           if (wider.w > region.w + 1e-6 || wider.h > region.h + 1e-6) {
             region = wider;
@@ -1464,6 +1485,7 @@ function collectFromScript(
   local: (p: Vec) => Vec,
   portConnections: Map<string, string[]>,
   nodeId: string,
+  labelLocal: Map<string, Rect>,
 ): void {
   for (const [elId, ann] of resolveAnnotations(def, resolved.node.params)) {
     const element = findById(resolved.vnodes, elId);
@@ -1501,7 +1523,22 @@ function collectFromScript(
       if (idx >= 0) resolved.anchors[idx] = value;
       else resolved.anchors.push(value);
     } else if (ann.kind === 'label') {
-      resolved.labelBoxes[elId] = transformedBounds(resolved.effective, elementBounds(element));
+      // Measured the same way the static pass measures it: `elementBounds` reports a `<text>`
+      // as the point it is anchored at, which collapsed every script-drawn caption to nothing
+      // and left the router with no caption to avoid.
+      const attrs = inheritedTextAttrs(findPath(resolved.vnodes, elId));
+      const value = resolved.labels[elId] ?? '';
+      resolved.labelStyles[elId] = labelStyle(attrs, resolved.effective.scale);
+      const localBox =
+        ann.markdown && element.tag === 'text'
+          ? (() => {
+              const layout = layoutMarkdown(value, markdownStyle(attrs));
+              resolved.labelNodes[elId] = markdownChildren(layout, point);
+              return markdownBounds(layout, point);
+            })()
+          : labelBounds(element, point, value, attrs);
+      labelLocal.set(elId, localBox);
+      resolved.labelBoxes[elId] = transformedBounds(resolved.effective, localBox);
     } else if (ann.kind === 'handle') {
       const idx = resolved.handles.findIndex((h) => h.id === elId);
       const value: ResolvedHandleInfo = {
