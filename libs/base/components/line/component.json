@@ -1,0 +1,47 @@
+{
+  "id": "line",
+  "name": "Line",
+  "version": "1.0.0",
+  "category": "shape",
+  "description": "A straight rail. Give it a port name and a connector meets it level with wherever it comes from.",
+  "resizable": true,
+  "params": [
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "strokeWidth",
+      "type": "number",
+      "label": "Stroke width",
+      "default": 1.5,
+      "min": 0,
+      "step": 0.5
+    },
+    {
+      "name": "dash",
+      "type": "enum",
+      "label": "Dash",
+      "default": "none",
+      "options": [
+        "none",
+        "6 4",
+        "2 3"
+      ]
+    },
+    {
+      "name": "port",
+      "type": "string",
+      "label": "Port name",
+      "default": ""
+    },
+    {
+      "name": "slot",
+      "type": "string",
+      "label": "Style slot",
+      "default": ""
+    }
+  ]
+}

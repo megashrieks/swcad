@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent } from 'react';
+import { Input, cn } from './pomavo';
 
 /**
  * Numeric field that survives hand editing. A controlled `<input type="number">` fights the
@@ -18,8 +19,10 @@ export function NumberInput({
   disabled,
   className = 'input',
   title,
+  placeholder,
 }: {
-  value: number;
+  /** `null` when the field stands for several values that disagree: the box shows blank. */
+  value: number | null;
   onCommit: (value: number) => void;
   min?: number;
   max?: number;
@@ -28,9 +31,10 @@ export function NumberInput({
   disabled?: boolean;
   className?: string;
   title?: string;
+  placeholder?: string;
 }): JSX.Element {
   const [draft, setDraft] = useState<string | null>(null);
-  const shown = draft ?? formatNumber(value, precision);
+  const shown = draft ?? (value === null ? '' : formatNumber(value, precision));
 
   const clamp = (n: number): number => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n));
 
@@ -42,7 +46,7 @@ export function NumberInput({
   };
 
   const nudge = (by: number): void => {
-    const base = Number(draft ?? value);
+    const base = draft !== null ? Number(draft) : (value ?? 0);
     const next = clamp((Number.isFinite(base) ? base : 0) + by);
     setDraft(null);
     onCommit(next);
@@ -62,14 +66,15 @@ export function NumberInput({
   };
 
   return (
-    <input
-      className={className}
+    <Input
+      className={cn(className)}
       type="text"
       inputMode="decimal"
       autoComplete="off"
       spellCheck={false}
       disabled={disabled}
       title={title}
+      placeholder={placeholder}
       value={shown}
       onChange={(e) => type(e.target.value)}
       onKeyDown={onKeyDown}

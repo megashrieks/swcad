@@ -15,11 +15,12 @@ export function SheetEditor({
 }): JSX.Element {
   useController(controller);
   const doc = controller.store.getDocument();
-  // The inspector pane only exists while something is selected; the canvas takes the space.
+  // The inspector only exists while something is selected. It floats over the canvas
+  // rather than taking a column, so appearing never resizes the drawing.
   const showInspector = hasInspectorTarget(controller);
 
   return (
-    <div className={`editor-layout${showInspector ? '' : ' no-inspector'}`}>
+    <div className="editor-layout">
       <aside className="side left">
         <LibraryPanel controller={controller} onEdit={onEditComponent} onDelete={onDeleteComponent} />
         <DocumentPanel controller={controller} />
@@ -34,13 +35,13 @@ export function SheetEditor({
             ) : null
           }
         />
-      </main>
 
-      {showInspector ? (
-        <aside className="side right">
-          <InspectorPanel controller={controller} />
-        </aside>
-      ) : null}
+        {showInspector ? (
+          <aside className="side right">
+            <InspectorPanel controller={controller} />
+          </aside>
+        ) : null}
+      </main>
     </div>
   );
 }

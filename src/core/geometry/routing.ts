@@ -118,6 +118,86 @@ function rectCenter(r: Rect): Vec {
   return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
 }
 
+/** How far off-axis a port normal has to point before its stub is drawn as a diagonal. */
+const DIAGONAL_MIN = 0.08;
+/** The snapped diagonal may not swing more than ~40° away from the port normal. */
+const DIAGONAL_APPROACH_MIN = 0.77;
+/** How much further than the plain stub a snapped diagonal may reach, in grid steps. */
+const DIAGONAL_REACH = 1.5;
+
+/** True when a facing points somewhere other than straight up, down, left or right. */
+function isDiagonalFacing(v?: Vec): boolean {
+  if (isZero(v)) return false;
+  const l = Math.hypot(v!.x, v!.y);
+  return Math.min(Math.abs(v!.x), Math.abs(v!.y)) / l > DIAGONAL_MIN;
+}
+
+/** True when the segment `a`→`b` runs into `r` before it gets there. */
+function segmentEnters(a: Vec, b: Vec, r: Rect): boolean {
+  const d = { x: b.x - a.x, y: b.y - a.y };
+  const len = Math.hypot(d.x, d.y);
+  if (len < 1e-9) return rectContains(r, a);
+  const t = rayEntry(a, d, r);
+  return t !== null && t < len - 1e-6;
+}
+
+/**
+ * Put the far end of a diagonal stub on a grid intersection.
+ *
+ * A port on a curve faces whichever way the curve does, so the route has to leave it at an
+ * angle before it can turn orthogonal. Left alone that turn happens wherever the stub
+ * ended — a few pixels off the grid, which reads as a wobble in an otherwise grid-aligned
+ * drawing. Landing it on an intersection instead means the diagonal starts on a grid
+ * corner and the orthogonal run leaves along a drawn grid line.
+ *
+ * Candidates are the intersections around the stub end; one is only taken if it still
+ * leaves the port roughly the way the port faces, still clears the node the port sits on,
+ * and does not put the diagonal through anything. Otherwise the plain stub stands.
+ */
+function snapStubToGrid(
+  stub: Vec,
+  ep: RouteEndpoint,
+  opts: RouteOptions,
+  obstacles: Rect[],
+  owner?: Rect,
+): Vec {
+  const step = opts.grid ?? 0;
+  if (step <= 0 || !isDiagonalFacing(ep.facing)) return stub;
+  const origin = opts.gridOrigin ?? { x: 0, y: 0 };
+  const l = Math.hypot(ep.facing!.x, ep.facing!.y) || 1;
+  const facing = { x: ep.facing!.x / l, y: ep.facing!.y / l };
+  const gx = Math.round((stub.x - origin.x) / step);
+  const gy = Math.round((stub.y - origin.y) / step);
+  const reach = dist(ep.pos, stub) + step * DIAGONAL_REACH;
+
+  let best: Vec | null = null;
+  let bestScore = Infinity;
+  for (let ix = -1; ix <= 1; ix += 1) {
+    for (let iy = -1; iy <= 1; iy += 1) {
+      const c = { x: (gx + ix) * step + origin.x, y: (gy + iy) * step + origin.y };
+      const away = { x: c.x - ep.pos.x, y: c.y - ep.pos.y };
+      const len = Math.hypot(away.x, away.y);
+      if (len < 1e-6 || len > reach) continue;
+      const along = (away.x * facing.x + away.y * facing.y) / len;
+      if (along < DIAGONAL_APPROACH_MIN) continue;
+      if (owner && rectContains(owner, c)) continue;
+      const blocked = obstacles.some((r) => {
+        if (owner && rectEquals(r, owner)) return false;
+        if (rectContains(r, ep.pos)) return false;
+        return rectContains(r, c) || segmentEnters(ep.pos, c, r);
+      });
+      if (blocked) continue;
+      // Nearest intersection, with a nudge towards the one straight ahead of the port.
+      const score = dist(stub, c) + (1 - along) * step;
+      if (score < bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    }
+  }
+  return best ?? stub;
+}
+
 /** True if `b` lies between `a` and `c` (inclusive), used to reject reversal "collinear" triples. */
 function isBetween(a: number, b: number, c: number, eps = 1e-6): boolean {
   return b >= Math.min(a, c) - eps && b <= Math.max(a, c) + eps;
@@ -262,6 +342,28 @@ function candidateKey(points: Vec[]): string {
  * through a box, the search is retried with progressively smaller clearances.
  */
 export function routeOrthogonal(from: RouteEndpoint, to: RouteEndpoint, opts: RouteOptions = {}): Vec[] {
+  return routeOrthogonalBest([from], [to], opts).points;
+}
+
+/** What a route settled on: the polyline, and which candidate end it chose at each side. */
+export interface RouteChoice {
+  points: Vec[];
+  from: RouteEndpoint;
+  to: RouteEndpoint;
+}
+
+/**
+ * As `routeOrthogonal`, but each end may offer several candidate places to attach and the
+ * search picks the pair that gives the cheapest route. Every candidate is fed to A* at once
+ * rather than routed separately, so this costs one search, not one per pair.
+ */
+export function routeOrthogonalBest(
+  fromList: RouteEndpoint[],
+  toList: RouteEndpoint[],
+  opts: RouteOptions = {},
+): RouteChoice {
+  const from = fromList[0];
+  const to = toList[0];
   const baseClearance = opts.clearance ?? 8;
   const ladder = [baseClearance];
   if (baseClearance > 0) {
@@ -277,16 +379,18 @@ export function routeOrthogonal(from: RouteEndpoint, to: RouteEndpoint, opts: Ro
   for (const clearance of ladder) {
     if (useAStar) {
       // Grid lanes first, so a route runs along the drawn grid wherever that is possible.
-      const snapped = onGrid ? routeWithAStar(from, to, opts, clearance, 'grid') : null;
+      const snapped = onGrid ? routeWithAStar(fromList, toList, opts, clearance, 'grid') : null;
       if (snapped) return snapped;
-      const searched = routeWithAStar(from, to, opts, clearance, 'lanes');
+      const searched = routeWithAStar(fromList, toList, opts, clearance, 'lanes');
       if (searched) return searched;
     }
+    // The legacy engine scores hand-written elbow shapes and has no notion of choosing an
+    // end, so it is only ever asked about the pair the caller nominated first.
     const attempt = routeAtClearance(from, to, opts, clearance);
-    if (attempt.collisions === 0) return attempt.points;
+    if (attempt.collisions === 0) return { points: attempt.points, from, to };
     if (!fallback || attempt.collisions < fallback.collisions) fallback = attempt;
   }
-  return fallback!.points;
+  return { points: fallback!.points, from, to };
 }
 
 interface StubGeometry {
@@ -299,73 +403,192 @@ interface StubGeometry {
   sb: Vec;
 }
 
+/**
+ * Room the stub needs beside the node it leaves, once clearance has been shared out.
+ *
+ * A node barely narrower than the corridor it sits in cannot have the full clearance on both
+ * its own bounds and the wall beside it — the room is simply not there. What made connectors
+ * hug walls for their whole length was the response to that: the clearance ladder dropped the
+ * *entire* route to whatever the tightest endpoint could manage. Clearance is instead resolved
+ * per obstacle, so one pinched endpoint costs clearance only where it is pinched.
+ */
+const PINCH_MARGIN = 1;
+
+/** Separation between two rects along their most-separated axis; 0 when they overlap. */
+function rectGap(a: Rect, b: Rect): number {
+  return Math.max(0, Math.max(a.x - (b.x + b.w), b.x - (a.x + a.w), a.y - (b.y + b.h), b.y - (a.y + a.h)));
+}
+
+/**
+ * Clearance for one obstacle, reduced only where an endpoint's own node is too close for the
+ * pair of them to have the full amount. Obstacles clear of both endpoints keep all of it.
+ */
+function pinchedClearance(r: Rect, owners: (Rect | undefined)[], clearance: number): number {
+  let out = clearance;
+  for (const owner of owners) {
+    if (!owner) continue;
+    const gap = rectGap(r, owner);
+    if (gap >= clearance * 2 + PINCH_MARGIN) continue;
+    out = Math.min(out, Math.max(0, (gap - PINCH_MARGIN) / 2));
+  }
+  return out;
+}
+
 /** Stub ends and inflated obstacles, shared by both routing engines so they agree. */
 function stubGeometry(from: RouteEndpoint, to: RouteEndpoint, opts: RouteOptions, clearance: number): StubGeometry {
-  const stub = opts.stub ?? 16;
-  const obstacles = (opts.obstacles ?? []).map((r) => inflate(r, clearance));
-  const fromOwner = opts.fromOwnerBounds ? inflate(opts.fromOwnerBounds, clearance) : undefined;
-  const toOwner = opts.toOwnerBounds ? inflate(opts.toOwnerBounds, clearance) : undefined;
+  const raw = opts.obstacles ?? [];
+  const owners = [opts.fromOwnerBounds, opts.toOwnerBounds];
+  const obstacles = raw.map((r) => inflate(r, pinchedClearance(r, owners, clearance)));
+  // An owner is inflated by what is left over beside it, so its stub cannot be pushed into a
+  // wall the obstacle pass has already agreed to stay out of. Obstacles it already touches say
+  // nothing about the room around it and are ignored here.
+  const ownerClearance = (owner?: Rect): number => {
+    if (!owner) return clearance;
+    let out = clearance;
+    for (const r of raw) {
+      const gap = rectGap(r, owner);
+      if (gap <= PINCH_MARGIN) continue;
+      out = Math.min(out, Math.max(0, (gap - PINCH_MARGIN) / 2));
+    }
+    return out;
+  };
+  const fromOwner = opts.fromOwnerBounds ? inflate(opts.fromOwnerBounds, ownerClearance(opts.fromOwnerBounds)) : undefined;
+  const toOwner = opts.toOwnerBounds ? inflate(opts.toOwnerBounds, ownerClearance(opts.toOwnerBounds)) : undefined;
 
-  const a = from.pos;
-  const b = to.pos;
-  const fromMinStub = fromOwner ? exitDistance(a, from.facing ?? { x: 0, y: 0 }, fromOwner) + 1 : 0;
-  const toMinStub = toOwner ? exitDistance(b, to.facing ?? { x: 0, y: 0 }, toOwner) + 1 : 0;
-  const fromStub = resolveStub(a, from.facing, Math.max(stub, fromMinStub), fromMinStub, obstacles, fromOwner);
-  const toStub = resolveStub(b, to.facing, Math.max(stub, toMinStub), toMinStub, obstacles, toOwner);
-  return { obstacles, fromOwner, toOwner, sa: stubPoint(from, fromStub), sb: stubPoint(to, toStub) };
+  return {
+    obstacles,
+    fromOwner,
+    toOwner,
+    sa: stubAt(from, fromOwner, opts, obstacles),
+    sb: stubAt(to, toOwner, opts, obstacles),
+  };
+}
+
+/**
+ * Where the route actually leaves one endpoint, once the room beside it is known.
+ *
+ * Split out from `stubGeometry` because it is the only part that varies between the
+ * candidate places a sliding port might attach at: the clearance shared out among the
+ * obstacles, and the inflation of each owning node, depend on the nodes alone. So the
+ * expensive half is computed once and this runs per candidate.
+ */
+function stubAt(ep: RouteEndpoint, owner: Rect | undefined, opts: RouteOptions, obstacles: Rect[]): Vec {
+  const stub = opts.stub ?? 16;
+  const minStub = owner ? exitDistance(ep.pos, ep.facing ?? { x: 0, y: 0 }, owner) + 1 : 0;
+  const distance = resolveStub(ep.pos, ep.facing, Math.max(stub, minStub), minStub, obstacles, owner);
+  return snapStubToGrid(stubPoint(ep, distance), ep, opts, obstacles, owner);
 }
 
 /** A* attempt at one clearance. Returns null when the lattice has no collision-free path. */
 function routeWithAStar(
-  from: RouteEndpoint,
-  to: RouteEndpoint,
+  fromList: RouteEndpoint[],
+  toList: RouteEndpoint[],
   opts: RouteOptions,
   clearance: number,
   mode: 'grid' | 'lanes',
-): Vec[] | null {
-  const geo = stubGeometry(from, to, opts, clearance);
-  const { obstacles, pruned } = latticeObstacles(geo);
-  const grid = mode === 'grid' ? gridLattice(geo, obstacles, opts) : null;
+): RouteChoice | null {
+  const geo = stubGeometry(fromList[0], toList[0], opts, clearance);
+  const fromStubs = fromList.map((ep) => stubAt(ep, geo.fromOwner, opts, geo.obstacles));
+  const toStubs = toList.map((ep) => stubAt(ep, geo.toOwner, opts, geo.obstacles));
+  const grid = mode === 'grid' ? gridLattice(geo, geo.obstacles, opts) : null;
   if (mode === 'grid' && !grid) return null;
-  const path = routeAStar(geo.sa, geo.sb, {
-    obstacles,
-    startAxis: axisOf(from.facing),
-    goalAxis: axisOf(to.facing),
-    startDir: from.facing,
-    goalDir: to.facing,
-    // Lines through the ports themselves and a mid lane, so the classic centre-split
-    // Z-route is always available even when no obstacle happens to sit on that line.
-    extraX: grid ? grid.xs : [from.pos.x, to.pos.x, (geo.sa.x + geo.sb.x) / 2],
-    extraY: grid ? grid.ys : [from.pos.y, to.pos.y, (geo.sa.y + geo.sb.y) / 2],
-    ...(grid
-      ? {
-          obstacleLanes: false,
-          preferX: grid.xs,
-          preferY: grid.ys,
-          offLinePenalty: Math.min(opts.grid ?? 0, opts.bendPenalty ?? DEFAULT_BEND_PENALTY) / 2,
-        }
-      : {}),
-    bendPenalty: opts.bendPenalty ?? DEFAULT_BEND_PENALTY,
-    maxNodes: MAX_LATTICE_NODES,
-  });
-  if (!path) return null;
-  // With a pruned obstacle set the path is only guaranteed clean against what the search
-  // could see, so re-check it against the obstacles that were dropped.
-  if (pruned) {
-    const dropped = geo.obstacles.filter(
-      (r) => !obstacles.includes(r) && !rectContains(r, geo.sa) && !rectContains(r, geo.sb),
-    );
-    if (crossesAny(path, dropped)) return null;
-  }
-  return simplify([from.pos, ...path, to.pos]);
+  const found = routeAStar(
+    fromList.map((ep, i) => ({ point: fromStubs[i], axis: axisOf(ep.facing), dir: ep.facing })),
+    toList.map((ep, i) => ({ point: toStubs[i], axis: axisOf(ep.facing), dir: ep.facing })),
+    {
+      obstacles: geo.obstacles,
+      // Lines through the ports themselves and a mid lane, so the classic centre-split
+      // Z-route is always available even when no obstacle happens to sit on that line.
+      extraX: grid ? grid.xs : [...fromList.map((e) => e.pos.x), ...toList.map((e) => e.pos.x), (geo.sa.x + geo.sb.x) / 2],
+      extraY: grid ? grid.ys : [...fromList.map((e) => e.pos.y), ...toList.map((e) => e.pos.y), (geo.sa.y + geo.sb.y) / 2],
+      ...(grid
+        ? {
+            obstacleLanes: false,
+            preferX: grid.xs,
+            preferY: grid.ys,
+            // Half a grid step: enough to settle a tied route onto the grid, never enough
+            // to pay for the detour that leaving it would cost. It has nothing to do with
+            // the bend cost, which used to cap it and so switched the preference off
+            // altogether whenever corners were free.
+            offLinePenalty: (opts.grid ?? 0) / 2,
+          }
+        : {}),
+      bendPenalty: opts.bendPenalty ?? DEFAULT_BEND_PENALTY,
+    },
+  );
+  if (!found) return null;
+  const from = fromList[found.startIndex];
+  const to = toList[found.goalIndex];
+  const full = simplify([from.pos, ...found.points, to.pos]);
+  if (!stubsAreClean(full, opts.obstacles ?? [], from.pos, to.pos)) return null;
+  return { points: full, from, to };
 }
 
-/** Grid multiples of `step` covering [min, max], or null when that needs too many lines. */
+/**
+ * True when the finished polyline crosses nothing it has no right to.
+ *
+ * Two things the search cannot see meet here. It is handed clearance-inflated obstacles and
+ * lets an endpoint escape whatever it starts inside — right for a port that genuinely overlaps
+ * its neighbour, wrong when the inflation is what put it there, because then a node slightly
+ * too big for the corridor it sits in is granted a free pass through the wall beside it. And it
+ * never sees the stub segments at all: they run from the port to the first lattice node, and for
+ * a surface port that segment is a diagonal.
+ *
+ * So the whole path, stubs included, is re-checked against the *raw* obstacles, exempting only
+ * the ones an endpoint is really inside. A failure sends the caller down to the next clearance.
+ */
+function stubsAreClean(points: Vec[], raw: Rect[], a: Vec, b: Vec): boolean {
+  for (const r of raw) {
+    if (insideStrict(r, a) || insideStrict(r, b)) continue;
+    for (let i = 1; i < points.length; i += 1) {
+      if (segmentEntersInterior(points[i - 1], points[i], r)) return false;
+    }
+  }
+  return true;
+}
+
+function insideStrict(r: Rect, p: Vec): boolean {
+  const eps = 1e-6;
+  return p.x > r.x + eps && p.x < r.x + r.w - eps && p.y > r.y + eps && p.y < r.y + r.h - eps;
+}
+
+/**
+ * Segment/rect interior overlap for a segment at any angle (Liang-Barsky clip). Mere contact
+ * with an edge does not count, and the diagonal stub a surface port produces is handled as
+ * readily as the axis-aligned body of a route.
+ */
+function segmentEntersInterior(a: Vec, b: Vec, r: Rect): boolean {
+  const eps = 1e-6;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  let t0 = 0;
+  let t1 = 1;
+  const clip = (p: number, q: number): boolean => {
+    if (Math.abs(p) < eps) return q >= -eps;
+    const t = q / p;
+    if (p < 0) {
+      if (t > t1) return false;
+      if (t > t0) t0 = t;
+    } else {
+      if (t < t0) return false;
+      if (t < t1) t1 = t;
+    }
+    return true;
+  };
+  if (!clip(-dx, a.x - r.x)) return false;
+  if (!clip(dx, r.x + r.w - a.x)) return false;
+  if (!clip(-dy, a.y - r.y)) return false;
+  if (!clip(dy, r.y + r.h - a.y)) return false;
+  if (t1 - t0 < eps) return false;
+  const t = (t0 + t1) / 2;
+  return insideStrict(r, { x: a.x + dx * t, y: a.y + dy * t });
+}
+
+/** Grid multiples of `step` covering [min, max], or null when the step is not usable. */
 function gridRange(step: number, origin: number, min: number, max: number): number[] | null {
   const first = Math.ceil((min - origin) / step - 1e-6) * step + origin;
   const count = Math.floor((max - first) / step + 1e-6) + 1;
   if (!Number.isFinite(count) || count < 1) return null;
-  if (count > MAX_GRID_LINES) return null;
   const out: number[] = [];
   for (let i = 0; i < count; i += 1) out.push(first + i * step);
   return out;
@@ -373,8 +596,8 @@ function gridRange(step: number, origin: number, min: number, max: number): numb
 
 /**
  * Lattice of document grid lines around the route, plus the two stub coordinates so the
- * ports themselves stay reachable. Null when the grid is too fine for the distance
- * involved, in which case the caller falls back to the obstacle-derived lattice.
+ * ports themselves stay reachable. Null when there is no usable grid, in which case the
+ * caller falls back to the obstacle-derived lattice.
  */
 function gridLattice(
   geo: StubGeometry,
@@ -402,56 +625,6 @@ function gridLattice(
 
 /** Corner cost for the A* router: about two grid steps, so it prefers straight over short. */
 const DEFAULT_BEND_PENALTY = 25;
-/** Upper bound on the lattice the A* router will search (roughly 110 x 110 lines). */
-const MAX_LATTICE_NODES = 12000;
-/** Most grid lines per axis before the grid lattice is abandoned as too fine. */
-const MAX_GRID_LINES = 100;
-/** Obstacles beyond this count are pruned to the ones near the route before searching. */
-const MAX_LATTICE_OBSTACLES = 48;
-/** How far outside the endpoints' bounding box a pruned obstacle is still considered. */
-const LATTICE_MARGIN = 260;
-
-/**
- * The obstacle set handed to the search. Dense sheets can put hundreds of nodes in the
- * query region, which would blow the lattice up; the far ones are dropped (owners never
- * are) and the caller re-checks the result against the full set.
- */
-function latticeObstacles(geo: StubGeometry): { obstacles: Rect[]; pruned: boolean } {
-  if (geo.obstacles.length <= MAX_LATTICE_OBSTACLES) return { obstacles: geo.obstacles, pruned: false };
-  const box = inflate(rectFromPoints(geo.sa, geo.sb), LATTICE_MARGIN);
-  const owners = [geo.fromOwner, geo.toOwner].filter((r): r is Rect => !!r);
-  const near = geo.obstacles.filter((r) => rectIntersects(r, box) || owners.some((o) => rectEquals(o, r)));
-  if (near.length <= MAX_LATTICE_OBSTACLES) return { obstacles: near, pruned: near.length !== geo.obstacles.length };
-  const mid = { x: (geo.sa.x + geo.sb.x) / 2, y: (geo.sa.y + geo.sb.y) / 2 };
-  const ranked = [...near].sort((r1, r2) => dist(mid, rectCenter(r1)) - dist(mid, rectCenter(r2)));
-  const kept = ranked.slice(0, MAX_LATTICE_OBSTACLES);
-  for (const owner of owners) if (!kept.some((r) => rectEquals(r, owner))) kept.push(owner);
-  return { obstacles: kept, pruned: true };
-}
-
-/** True when any interior segment of `points` cuts through an obstacle. */
-function crossesAny(points: Vec[], obstacles: Rect[]): boolean {
-  for (let i = 1; i < points.length; i += 1) {
-    for (const r of obstacles) {
-      if (segmentCrossesInterior(points[i - 1], points[i], r)) return true;
-    }
-  }
-  return false;
-}
-
-/** Segment/rect interior overlap, ignoring mere contact with an edge. */
-function segmentCrossesInterior(a: Vec, b: Vec, r: Rect): boolean {
-  const eps = 1e-6;
-  if (Math.abs(a.y - b.y) < eps) {
-    if (a.y <= r.y + eps || a.y >= r.y + r.h - eps) return false;
-    return Math.min(Math.max(a.x, b.x), r.x + r.w) - Math.max(Math.min(a.x, b.x), r.x) > eps;
-  }
-  if (Math.abs(a.x - b.x) < eps) {
-    if (a.x <= r.x + eps || a.x >= r.x + r.w - eps) return false;
-    return Math.min(Math.max(a.y, b.y), r.y + r.h) - Math.max(Math.min(a.y, b.y), r.y) > eps;
-  }
-  return false;
-}
 
 function routeAtClearance(
   from: RouteEndpoint,

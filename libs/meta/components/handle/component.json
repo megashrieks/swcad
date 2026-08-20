@@ -1,0 +1,13 @@
+{
+  "id": "handle",
+  "name": "Resize handle",
+  "version": "1.0.0",
+  "category": "marker",
+  "description": "A grip that drives the size of the placed component. Put it in the corner it should pull.",
+  "resizable": false,
+  "marker": true,
+  "params": [
+    { "name": "axis", "type": "enum", "label": "Axis", "default": "both", "options": ["both", "x", "y", "radial"] },
+    { "name": "min", "type": "number", "label": "Minimum", "default": 20, "min": 0 }
+  ]
+}

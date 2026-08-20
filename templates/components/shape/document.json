@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "{{id}}",
+  "name": "{{name}}",
+  "kind": "component-draft",
+  "grid": { "size": 10, "subdivisions": 2, "origin": { "x": 0, "y": 0 }, "unit": "px", "visible": true, "snap": true },
+  "page": null,
+  "legend": null,
+  "meta": { "title": "{{name}}" },
+  "nodes": [
+    {
+      "id": "body",
+      "componentRef": "meta/rect",
+      "transform": { "x": 0, "y": 0, "rot": 0, "scale": 1 },
+      "size": { "w": 120, "h": 70 },
+      "params": { "fill": "var(--sw-surface)", "stroke": "var(--sw-ink)", "strokeWidth": 1.5, "radius": 4, "dash": "none", "port": "" },
+      "z": 0
+    },
+    {
+      "id": "title",
+      "componentRef": "meta/label",
+      "transform": { "x": 20, "y": 27, "rot": 0, "scale": 1 },
+      "size": { "w": 80, "h": 16 },
+      "params": { "bind": "params.title", "sample": "{{name}}", "fontSize": 13, "weight": "500", "align": "middle", "color": "var(--sw-ink)" },
+      "z": 1
+    },
+    {
+      "id": "port-w",
+      "componentRef": "meta/port",
+      "transform": { "x": -12, "y": 23, "rot": 180, "scale": 1 },
+      "size": { "w": 24, "h": 24 },
+      "params": { "name": "w", "direction": "inout", "color": "var(--sw-port)" },
+      "z": 2
+    },
+    {
+      "id": "port-e",
+      "componentRef": "meta/port",
+      "transform": { "x": 108, "y": 23, "rot": 0, "scale": 1 },
+      "size": { "w": 24, "h": 24 },
+      "params": { "name": "e", "direction": "inout", "color": "var(--sw-port)" },
+      "z": 3
+    },
+    {
+      "id": "port-n",
+      "componentRef": "meta/port",
+      "transform": { "x": 48, "y": -12, "rot": 270, "scale": 1 },
+      "size": { "w": 24, "h": 24 },
+      "params": { "name": "n", "direction": "inout", "color": "var(--sw-port)" },
+      "z": 4
+    },
+    {
+      "id": "port-s",
+      "componentRef": "meta/port",
+      "transform": { "x": 48, "y": 58, "rot": 90, "scale": 1 },
+      "size": { "w": 24, "h": 24 },
+      "params": { "name": "s", "direction": "inout", "color": "var(--sw-port)" },
+      "z": 5
+    }
+  ],
+  "connections": []
+}

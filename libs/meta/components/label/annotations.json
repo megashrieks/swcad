@@ -1,0 +1,23 @@
+{
+  "body": [
+    {
+      "kind": "style",
+      "attrs": {
+        "font-size": "params.fontSize",
+        "font-weight": "params.weight",
+        "text-anchor": "params.align",
+        "fill": "params.color"
+      }
+    },
+    {
+      "kind": "label",
+      "bind": "{{params.bind}}|params.sample",
+      "editable": true,
+      "inherit": true
+    },
+    {
+      "kind": "fill_slot",
+      "name": "{{params.slot}}"
+    }
+  ]
+}

@@ -14,7 +14,7 @@
       "default": "orthogonal",
       "options": ["orthogonal", "straight", "curve"]
     },
-    { "name": "stroke", "type": "color", "label": "Stroke", "default": "#3b4252" },
+    { "name": "stroke", "type": "color", "label": "Stroke", "default": "var(--sw-ink)" },
     {
       "name": "strokeWidth",
       "type": "number",
@@ -34,11 +34,13 @@
       "name": "bendPenalty",
       "type": "number",
       "label": "Bend cost",
-      "default": 25,
+      "default": 0,
       "min": 0,
       "max": 200,
       "step": 5
     },
+    { "name": "stub", "type": "number", "label": "Lead-in", "default": 18, "min": 0, "max": 80, "step": 1 },
+    { "name": "clearance", "type": "number", "label": "Clearance", "default": 10, "min": 0, "max": 80, "step": 1 },
     { "name": "label", "type": "string", "label": "Label", "default": "" }
   ]
 }

@@ -1,57 +1,129 @@
 /*
- * Monokai Pro colour scheme: warm charcoals with six saturated accents, matching the
- * VS Code theme of the same name so the editor and the tool sit next to each other
- * comfortably. The drawing sheet stays paper-white - components are authored in dark
- * ink - so overlays drawn on it use the darkened `--ink-*` members of the same palette
- * instead of the light tones, which would disappear on white.
+ * swcad's own chrome, layered on top of the vendored Pomavo UI tokens.
+ *
+ * Every colour here resolves through Pomavo's `--color-*` custom properties, which the
+ * theme provider rewrites on `documentElement` whenever the palette or light/dark mode
+ * changes - so the toolbar, panels, canvas overlays and dialogs all re-theme together
+ * with the shadcn components. The drawing sheet follows too, through the `--sw-*` canvas
+ * palette below, which components may borrow from with `var(--sw-ink)` and friends.
+ *
+ * The look is Pomavo's "borderless" one: separation comes from background steps and
+ * spacing, chrome is revealed on hover, and only genuinely load-bearing edges (the page
+ * sheet, a focus ring, an active tab) draw a line.
  */
 :root {
-  --mk-bg-0: #19181a;
-  --mk-bg-1: #221f22;
-  --mk-bg-2: #2d2a2e;
-  --mk-bg-3: #403e41;
-  --mk-bg-4: #5b595c;
-  --mk-dim: #727072;
-  --mk-fg-2: #939293;
-  --mk-fg-1: #c1c0c0;
-  --mk-fg: #fcfcfa;
-  --mk-red: #ff6188;
-  --mk-orange: #fc9867;
-  --mk-yellow: #ffd866;
-  --mk-green: #a9dc76;
-  --mk-cyan: #78dce8;
-  --mk-purple: #ab9df2;
+  /* Legacy palette slots, now fed by the active theme. */
+  --mk-bg-0: var(--color-sidebar);
+  --mk-bg-1: var(--color-background);
+  --mk-bg-2: var(--color-card);
+  --mk-bg-3: var(--color-secondary);
+  --mk-bg-4: var(--color-border);
+  --mk-dim: var(--color-muted-foreground);
+  --mk-fg-2: var(--color-muted-foreground);
+  --mk-fg-1: var(--color-foreground);
+  --mk-fg: var(--color-foreground);
+  --mk-red: var(--color-destructive);
+  --mk-orange: var(--color-chart-5);
+  --mk-yellow: var(--color-chart-3);
+  --mk-green: var(--color-chart-2);
+  --mk-cyan: var(--color-chart-1);
+  --mk-purple: var(--color-chart-4);
 
-  --bg: var(--mk-bg-1);
-  --bg-2: var(--mk-bg-2);
-  --bg-3: var(--mk-bg-3);
-  --well: var(--mk-bg-0);
-  --line: var(--mk-bg-4);
-  --text: var(--mk-fg);
-  --muted: var(--mk-fg-2);
-  --faint: var(--mk-dim);
-  --accent: var(--mk-cyan);
-  --accent-2: var(--mk-yellow);
-  --danger: var(--mk-red);
-  --ok: var(--mk-green);
-  --on-accent: var(--mk-bg-0);
-  --ring: rgba(120, 220, 232, 0.28);
+  --bg: var(--color-background);
+  --bg-2: var(--color-sidebar);
+  --bg-3: var(--color-secondary);
+  --well: var(--color-sidebar);
+  --line: var(--color-border);
+  --text: var(--color-foreground);
+  --muted: var(--color-muted-foreground);
+  --faint: color-mix(in srgb, var(--color-muted-foreground) 70%, var(--color-background));
+  --accent: var(--color-primary);
+  --accent-2: var(--color-chart-1);
+  --danger: var(--color-destructive);
+  --ok: var(--color-chart-2);
+  --on-accent: var(--color-primary-foreground);
+  --ring: color-mix(in srgb, var(--color-ring) 34%, transparent);
 
-  /* Ink on the white sheet. */
-  --sheet: #fdfdfc;
-  --ink-accent: #128092;
-  --ink-accent-2: #c07d16;
-  --ink-ok: #4f9c2f;
-  --ink-line: #8a8580;
-  --ink-frame: #3a3639;
-  --ink-zone: #56514f;
+  /* A hover wash and a pressed wash, used instead of borders. */
+  --hover: color-mix(in srgb, var(--color-foreground) 8%, transparent);
+  --sunken: color-mix(in srgb, var(--color-foreground) 4%, transparent);
+
+  /*
+   * A rule you are meant to see. `--line` divides things *inside* a panel, where the eye
+   * already knows where it is; this one divides a panel from the drawing, and there the two
+   * backgrounds can be a shade apart and a hairline at the panel's own contrast simply
+   * vanishes. Mixing towards the foreground keeps it correct in a light theme too.
+   */
+  --line-strong: color-mix(in srgb, var(--color-border) 45%, var(--color-foreground));
+
+  /*
+   * The canvas palette. Everything drawn on the sheet - the paper, the grid, the editor's
+   * own overlays and any component that opted in with `var(--sw-*)` - reads from here, so
+   * the drawing follows the theme exactly like the chrome does.
+   *
+   * A component that hardcodes a colour keeps it; only these tokens move.
+   */
+  --sw-paper: var(--color-background);
+  --sw-surface: var(--color-card);
+  --sw-surface-2: var(--color-secondary);
+  --sw-ink: var(--color-foreground);
+  --sw-ink-muted: var(--color-muted-foreground);
+  --sw-line: var(--color-border);
+  --sw-accent: var(--color-primary);
+  --sw-accent-2: var(--color-chart-1);
+  --sw-success: var(--color-chart-2);
+  --sw-warning: var(--color-chart-3);
+  --sw-danger: var(--color-destructive);
+  --sw-port: var(--color-chart-1);
+  --sw-1: var(--color-chart-1);
+  --sw-2: var(--color-chart-2);
+  --sw-3: var(--color-chart-3);
+  --sw-4: var(--color-chart-4);
+  --sw-5: var(--color-chart-5);
+
+  /*
+   * Editor chrome drawn on the sheet. Mixed against the paper rather than made
+   * translucent, so the 2D canvas layers can use them directly with no compositing.
+   */
+  --sw-grid-minor: color-mix(in srgb, var(--sw-ink) 7%, var(--sw-paper));
+  --sw-grid-major: color-mix(in srgb, var(--sw-ink) 14%, var(--sw-paper));
+  --sw-grid-axis: color-mix(in srgb, var(--sw-ink) 24%, var(--sw-paper));
+  --sw-highlight: color-mix(in srgb, var(--sw-accent-2) 12%, transparent);
+  --sw-guide: var(--sw-warning);
+  --sw-guide-weak: color-mix(in srgb, var(--sw-warning) 38%, transparent);
+  --sw-frame: color-mix(in srgb, var(--sw-ink) 72%, var(--sw-paper));
+  --sw-zone: var(--sw-ink-muted);
+  --sw-selection: var(--sw-accent-2);
+
+  /* Overlay ink, now a view onto the canvas palette. */
+  --sheet: var(--sw-paper);
+  --ink-accent: var(--sw-accent-2);
+  --ink-accent-2: var(--sw-warning);
+  --ink-ok: var(--sw-success);
+  --ink-line: var(--sw-line);
+  --ink-frame: var(--sw-frame);
+  --ink-zone: var(--sw-zone);
 
   --radius: 6px;
   --font: 'Inter', 'Segoe UI', system-ui, sans-serif;
   --mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+}
 
-  /* Native widgets - select popups, checkboxes, scrollbars - follow the theme too. */
+/* Native widgets - select popups, checkboxes, scrollbars - follow the theme too. */
+html.dark {
   color-scheme: dark;
+
+  /*
+   * Most dark palettes set `card` equal to `background`, which would make a filled shape
+   * vanish into the paper. Lift it just enough to read as a body on the sheet.
+   */
+  --sw-surface: color-mix(in srgb, var(--color-card) 93%, var(--color-foreground));
+}
+
+html.light {
+  color-scheme: light;
 }
 
 /* Dark chrome deserves dark scrollbars; the sheet keeps the light default. */
@@ -107,10 +179,9 @@ body {
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   padding: 6px 10px;
   background: var(--bg-2);
-  border-bottom: 1px solid var(--line);
   flex: 0 0 auto;
 }
 
@@ -118,19 +189,19 @@ body {
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--mk-green);
+  color: var(--accent);
+  padding-right: 6px;
 }
 
+/* Separation between clusters is spacing, not a rule. */
 .toolbar .group {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding-right: 12px;
-  border-right: 1px solid var(--line);
+  padding-right: 6px;
 }
 
 .toolbar .group:last-of-type {
-  border-right: none;
   padding-right: 0;
 }
 
@@ -138,43 +209,6 @@ body {
 .btn-group {
   display: inline-flex;
   align-items: stretch;
-}
-
-.btn-group > * {
-  border-radius: 0;
-  position: relative;
-}
-
-/* Collapse the shared edges so neighbours read as one strip, not stacked boxes. */
-.btn-group > * + * {
-  margin-left: -1px;
-}
-
-.btn-group > *:first-child {
-  border-top-left-radius: var(--radius);
-  border-bottom-left-radius: var(--radius);
-}
-
-.btn-group > *:last-child {
-  border-top-right-radius: var(--radius);
-  border-bottom-right-radius: var(--radius);
-}
-
-/* Lift the member being pointed at (or pressed) so its whole border stays visible. */
-.btn-group > .btn:hover,
-.btn-group > .btn:focus-visible,
-.btn-group > .btn.is-active {
-  z-index: 1;
-}
-
-/* A readout sitting inside a group is a segment too, not a floating label. */
-.btn-group > .zoom {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  background: var(--bg-3);
 }
 
 .toolbar .spacer {
@@ -199,27 +233,12 @@ body {
   direction: rtl;
 }
 
-.btn {
-  background: var(--bg-3);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 4px 10px;
-  font: inherit;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* Icon-only buttons stay square so a toolbar group reads as one control strip. */
-.btn.icon {
-  padding: 5px;
-  width: 28px;
-  height: 28px;
-  justify-content: center;
-}
-
+/*
+ * Buttons come from Pomavo (`ghost` in the toolbar, `default` for a primary action), so
+ * only the swcad-specific states live here: the icon box, the mirrored redo glyph and the
+ * auto-save badge. Everything in this file is unlayered and therefore beats Tailwind's
+ * utility layer — keep these rules to states the variants do not model.
+ */
 .btn-icon {
   display: inline-flex;
   align-items: center;
@@ -235,32 +254,53 @@ body {
   transform: scaleX(-1);
 }
 
-.btn:hover {
-  border-color: var(--accent);
-}
-
+/* Pressed toggles read as a tint, not a slab of accent. */
 .btn.is-active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
-  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
 }
 
-.btn:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--ring);
+/*
+ * Auto-save badge. The button is always "Save" — the colour reports what the sheet is
+ * doing, so a glance tells you whether your work is on disk.
+ */
+.btn.save {
+  min-width: 108px;
+  justify-content: center;
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
 }
 
-.btn.primary {
-  background: var(--mk-green);
-  border-color: var(--mk-green);
-  color: var(--on-accent);
-  font-weight: 600;
+.btn.save:hover {
+  background: color-mix(in srgb, var(--ok) 20%, transparent);
+  color: var(--ok);
 }
 
-.btn.primary:hover {
-  border-color: var(--mk-fg);
+.btn.save.is-pending,
+.btn.save.is-saving {
+  color: var(--mk-yellow);
+  background: color-mix(in srgb, var(--mk-yellow) 14%, transparent);
+}
+
+.btn.save.is-error {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.btn.save.is-saving .btn-icon {
+  animation: swcad-spin 900ms linear infinite;
+}
+
+@keyframes swcad-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn.save.is-saving .btn-icon {
+    animation: none;
+  }
 }
 
 .btn:disabled {
@@ -272,34 +312,88 @@ body {
   color: var(--danger);
 }
 
+/* ---------------------------------------------------------- button group */
+/*
+ * Borderless grouping: a cluster sits in one faintly sunken tray with the members floating
+ * inside it, so related controls read as a unit without a single drawn edge. Square, like
+ * everything else in the chrome — the tray reads as a region of the bar, not as an object
+ * sitting on it.
+ */
+
+.btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--sunken);
+}
+
+/* A readout sitting inside a group is a segment too, not a floating label. */
+.btn-group > .zoom {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+}
+
 /* ------------------------------------------------------------- layout */
 
 .editor-layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 250px 1fr 290px;
+  grid-template-columns: 250px 1fr;
   min-height: 0;
 }
 
 .editor-layout .side {
   background: var(--bg-2);
-  border-right: 1px solid var(--line);
   overflow-y: auto;
   min-height: 0;
 }
 
-.editor-layout .side.right {
-  border-right: none;
-  border-left: 1px solid var(--line);
+/*
+ * Where a panel meets the drawing it gets a rule of its own. The palette and the canvas are
+ * a shade apart at most in some themes, and without an edge the sheet appears to start
+ * somewhere in the middle of the component list.
+ */
+.editor-layout .side.left {
+  border-right: 1px solid var(--line-strong);
 }
 
-.editor-layout:has(.side.wide) {
-  grid-template-columns: 250px 1fr 380px;
+/* Nothing open in the component editor: no palette either, so the empty state gets the
+   whole width. */
+.editor-layout.no-palette {
+  grid-template-columns: 1fr;
 }
 
-/* No selection: the inspector pane is gone and the canvas takes its width. */
-.editor-layout.no-inspector {
-  grid-template-columns: 250px 1fr;
+/*
+ * The inspector floats over the drawing instead of holding a column of its own.
+ * Selecting something is the most ordinary thing you can do on a canvas, and it must not
+ * resize the canvas underneath the pointer: a pane that comes and goes would re-frame the
+ * drawing mid-gesture and move whatever you were about to click on next.
+ */
+.canvas-area .side.right,
+.preview-pane .side.right {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 290px;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-2);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
+  z-index: 4;
+}
+
+/* Whatever the editor last had to say — an opened copy, a failed save. */
+.side-status {
+  margin: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .canvas-area {
@@ -363,6 +457,17 @@ body {
   stroke: var(--ink-accent);
   stroke-width: 1;
   stroke-dasharray: 4 3;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+}
+
+/* One primitive of the component under edit: the same language as a node selection, in the
+   accent colour reserved for annotations so the two never read as the same thing. */
+.element-outline {
+  fill: none;
+  stroke: var(--ink-accent-2);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 2;
   pointer-events: none;
   vector-effect: non-scaling-stroke;
 }
@@ -454,19 +559,34 @@ body {
   vector-effect: non-scaling-stroke;
 }
 
-/* Sits exactly on top of the label it edits: no padding, border or ring, so nothing
-   shifts the glyphs and nothing frames the text while you type. */
+/* Sits exactly on top of the label it edits: no padding, border, ring or background, so
+   nothing shifts the glyphs and nothing frames the text while you type. The label
+   underneath is hidden while it is open (see `nodeMarkup`), so there is nothing to cover. */
 .label-editor {
   position: absolute;
   z-index: 5;
   box-sizing: border-box;
-  background: #fff;
+  background: transparent;
   color: #111;
   border: none;
   outline: none;
   border-radius: 0;
   padding: 0;
   font: inherit;
+}
+
+/* Markdown is edited as source, so unlike an inline label it is deliberately visible
+   as a panel rather than pretending to be the drawn text. */
+.label-editor.is-markdown {
+  padding: 4px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  resize: none;
+  white-space: pre;
+  overflow: auto;
 }
 
 /* ------------------------------------------------------------- page */
@@ -505,7 +625,11 @@ body {
 /* ------------------------------------------------------------- panels */
 
 .panel {
-  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+
+.panel + .panel {
+  margin-top: 2px;
 }
 
 .panel-head {
@@ -514,7 +638,7 @@ body {
   justify-content: space-between;
   gap: 8px;
   padding: 7px 10px;
-  background: var(--bg-3);
+  background: var(--bg-2);
   position: sticky;
   top: 0;
   z-index: 2;
@@ -526,6 +650,16 @@ body {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+/* Paint-order buttons, in the inspector's header where they cost no height. Negative
+   margins let the ghost buttons' padding overhang the header's own, so the row reads as
+   part of the title bar rather than as a toolbar bolted under it. */
+.order-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin: -4px -4px -4px 0;
 }
 
 .panel-body {
@@ -563,48 +697,170 @@ body {
   overflow-wrap: anywhere;
 }
 
+/*
+ * A section heading, used both as a plain `div` (inspector blocks) and as a `button`
+ * (the foldable sections in the sheet panel), so the base rule carries the button reset.
+ */
 .subhead {
-  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 7px 0 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
-  border-top: 1px solid var(--line);
-  padding-top: 7px;
+  text-align: left;
 }
 
+button.subhead {
+  cursor: pointer;
+}
+
+button.subhead:hover {
+  color: var(--fg);
+}
+
+.subhead-caret {
+  flex: 0 0 auto;
+  transition: transform 0.12s ease;
+}
+
+.subhead.is-collapsed .subhead-caret {
+  transform: rotate(-90deg);
+}
+
+/*
+ * `.input` is only a layout hook now: the field chrome — transparent until hovered or
+ * focused — belongs to Pomavo's Input and SelectTrigger, which carry this class alongside
+ * their own utilities.
+ */
 .input {
   width: 100%;
-  background: var(--well);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 4px 6px;
-  font: inherit;
 }
 
-.input:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--ring);
+/* The colour well is a swatch (opening a palette popover) plus a hex/token readout. */
+.color-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.input.color {
-  padding: 1px;
+.color-swatch {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  /* A chequerboard behind the swatch, so a transparent or unset colour is obvious. */
+  box-shadow: inset 0 0 0 1px var(--hover);
+}
+
+.color-swatch:hover {
+  box-shadow: inset 0 0 0 1px var(--muted);
+}
+
+/*
+ * The palette hangs off a Radix popover, which arrives with a corner radius of its own.
+ * Nothing else that floats over the chrome has one — menus and selects are square — so it
+ * is squared here rather than in the vendored component.
+ */
+.color-pop {
+  width: 208px;
+  display: grid;
+  gap: 6px;
+  border-radius: 0;
+}
+
+.color-pop-head {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.color-pop-grid {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 4px;
+}
+
+.color-chip {
+  aspect-ratio: 1;
+  border: none;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--hover);
+}
+
+.color-chip:hover {
+  box-shadow: inset 0 0 0 1px var(--muted);
+}
+
+.color-chip[data-active='true'] {
+  box-shadow:
+    0 0 0 2px var(--bg-2),
+    0 0 0 3px var(--accent);
+}
+
+.color-pop-native {
+  width: 100%;
   height: 26px;
+  padding: 2px;
+  background: var(--sunken);
+  border: none;
+  cursor: pointer;
+}
+
+.color-swatch::-webkit-color-swatch-wrapper,
+.color-pop-native::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-swatch::-webkit-color-swatch,
+.color-pop-native::-webkit-color-swatch {
+  border: none;
+  border-radius: 0;
+}
+
+.color-hex {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--mono);
 }
 
 .check {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   font-size: 12px;
   color: var(--text);
   cursor: pointer;
 }
 
-.check input {
-  accent-color: var(--accent);
+/* A box standing for several values that disagree. Radix draws its tick for the
+   indeterminate state too, so the tick is swapped for a dash here rather than in the
+   vendored component. */
+.check [data-state='indeterminate'] svg {
+  display: none;
+}
+
+.check [data-state='indeterminate']::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  height: 1.5px;
+  background: var(--ink);
+}
+
+.check [data-state='indeterminate'] {
+  position: relative;
 }
 
 .hint {
@@ -617,7 +873,7 @@ body {
 code {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--mk-yellow);
+  color: var(--accent);
 }
 
 .error {
@@ -636,7 +892,6 @@ code {
   max-height: 160px;
   overflow: auto;
   background: var(--well);
-  border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 6px;
   font-family: var(--mono);
@@ -678,8 +933,7 @@ code {
   margin-left: 6px;
   padding: 0 5px;
   border-radius: 8px;
-  background: var(--well);
-  border: 1px solid var(--line);
+  background: var(--sunken);
   font-size: 10px;
   color: var(--muted);
 }
@@ -695,9 +949,45 @@ code {
 .lib-name {
   display: flex;
   align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  font: inherit;
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  text-align: left;
+}
+
+.lib-name:hover {
+  color: var(--fg);
+}
+
+.lib-caret {
+  flex: 0 0 auto;
+  transition: transform 0.12s ease;
+}
+
+.lib-name.is-collapsed .lib-caret {
+  transform: rotate(-90deg);
+}
+
+.lib-label {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Pushed right so a folded group still says how much is inside it. */
+.lib-count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
   color: var(--muted);
 }
 
@@ -713,8 +1003,8 @@ code {
   align-items: center;
   gap: 4px;
   padding: 6px 4px;
-  background: var(--bg-3);
-  border: 1px solid var(--line);
+  background: var(--sunken);
+  border: 1px solid transparent;
   border-radius: var(--radius);
   color: var(--text);
   font: inherit;
@@ -723,12 +1013,12 @@ code {
 }
 
 .lib-item:hover {
-  border-color: var(--accent);
+  background: var(--hover);
 }
 
 .lib-item.is-active {
-  border-color: var(--accent-2);
-  box-shadow: inset 0 0 0 1px var(--accent-2);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .lib-cell {
@@ -761,20 +1051,17 @@ code {
   height: 18px;
   padding: 0;
   background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: 3px;
   color: var(--muted);
   cursor: pointer;
 }
 
 .lib-action:hover {
   color: var(--text);
-  border-color: var(--accent);
+  background: var(--hover);
 }
 
 .lib-action.danger:hover {
   color: var(--danger);
-  border-color: var(--danger);
 }
 
 .preview {
@@ -786,37 +1073,6 @@ code {
 
 .preview.large {
   height: 190px;
-}
-
-/* ------------------------------------------------------------- component editor */
-
-.tabs {
-  display: flex;
-  gap: 2px;
-  padding: 6px 8px 0;
-  background: var(--bg-2);
-  position: sticky;
-  top: 0;
-  z-index: 3;
-}
-
-.tab {
-  flex: 1;
-  background: transparent;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: var(--radius) var(--radius) 0 0;
-  color: var(--muted);
-  font: inherit;
-  text-transform: capitalize;
-  padding: 4px 6px;
-  cursor: pointer;
-}
-
-.tab.is-active {
-  background: var(--bg-3);
-  border-color: var(--line);
-  color: var(--text);
 }
 
 /* --------------------------------------------- component editor: split canvas */
@@ -841,7 +1097,16 @@ code {
   flex-direction: column;
   min-height: 0;
   background: var(--bg-2);
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--line-strong);
+}
+
+/* Minimised: the tab strip stays, so a file is one click from being back. */
+.code-pane.is-collapsed {
+  flex: 0 0 auto;
+}
+
+.code-pane.is-collapsed .file-tabs {
+  padding-bottom: 4px;
 }
 
 .file-tabs {
@@ -852,12 +1117,49 @@ code {
   overflow-x: auto;
 }
 
+/* The strip ends with the problem count and the minimise toggle. They stay put when the
+   tabs overflow, because a hidden toggle is a toggle nobody can find. */
+.tab-end {
+  display: flex;
+  align-items: stretch;
+  flex: none;
+  margin-left: auto;
+  position: sticky;
+  right: 0;
+  background: var(--bg-2);
+}
+
+.file-problems,
+.pane-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.file-problems {
+  color: var(--danger);
+}
+
+.file-problems:hover,
+.pane-toggle:hover {
+  color: var(--text);
+}
+
+/* Borderless tabs: the active one is marked by its fill and an accent underline. */
 .file-tab {
   display: flex;
   align-items: center;
-  border: 1px solid transparent;
-  border-bottom: none;
   border-radius: var(--radius) var(--radius) 0 0;
+  border-bottom: 2px solid transparent;
   color: var(--muted);
 }
 
@@ -871,20 +1173,41 @@ code {
   cursor: pointer;
 }
 
+.file-tab:hover {
+  background: var(--hover);
+}
+
 .file-tab.is-active {
   background: var(--well);
-  border-color: var(--line);
+  border-bottom-color: var(--accent);
   color: var(--text);
 }
 
+/* The slot is reserved from the start: revealing the icon on hover used to widen the
+   tab and shove every tab after it sideways. */
 .file-tab .file-close {
-  display: none;
+  display: flex;
+  align-items: center;
+  flex: none;
   padding: 4px 6px 4px 0;
   color: var(--muted);
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 90ms ease;
 }
 
-.file-tab:hover .file-close {
-  display: block;
+.file-tab:hover .file-close,
+.file-tab:focus-within .file-close {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* The manifest cannot be removed, so it has no close button; keep its trailing space
+   the same as its neighbours' so the row reads evenly. */
+.file-tab.is-fixed::after {
+  content: '';
+  flex: none;
+  width: 21px;
 }
 
 .file-tab .file-close:hover {
@@ -913,7 +1236,6 @@ code {
   min-height: 0;
   overflow: hidden;
   background: var(--well);
-  border-top: 1px solid var(--line);
 }
 
 p.file-editor.empty {
@@ -923,7 +1245,6 @@ p.file-editor.empty {
   margin: 0;
   padding: 0 16px;
   background: var(--well);
-  border-top: 1px solid var(--line);
   color: var(--faint);
   font-size: 12px;
   text-align: center;
@@ -936,7 +1257,7 @@ p.file-editor.empty {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  border-top: 1px solid var(--line);
+  background: var(--sunken);
 }
 
 .hint.warn,
@@ -944,74 +1265,183 @@ p.file-editor.empty {
   color: var(--accent-2);
 }
 
-/* ------------------------------------------- component editor: annotations */
-
-.ann-row {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg-3);
-  overflow: hidden;
-}
-
-.ann-row.is-missing {
-  border-color: var(--accent-2);
-}
-
-.ann-head {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
-  background: transparent;
-  border: none;
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
-}
-
-.ann-head .spacer {
-  flex: 1;
-}
-
-.ann-tag {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.ann-body {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 6px 8px 8px;
-  border-top: 1px solid var(--line);
-}
-
-.facts {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 2px 10px;
-  margin: 0;
-  font-size: 11px;
-}
-
-.facts dt {
-  color: var(--muted);
-}
-
-.facts dd {
-  margin: 0;
-  font-family: var(--mono);
-  overflow-wrap: anywhere;
-}
-
 .param-row {
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 8px;
-  background: var(--bg-3);
-  border: 1px solid var(--line);
+  background: var(--sunken);
   border-radius: var(--radius);
+}
+
+/* ------------------------------------------------------------------ dialogs */
+/*
+ * Modal questions replacing window.alert/confirm/prompt. The overlay, panel, focus trap
+ * and animation are Pomavo's Radix dialog; what is left here is swcad's own spacing and
+ * the wrapping rules a file path in the question needs.
+ */
+
+.dialog-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.dialog-message {
+  margin: 0;
+  line-height: 1.45;
+  font-size: 13px;
+  color: var(--text);
+  /* A path or a component ref in the question must not push the panel wider. */
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* -------------------------------------------------------- the component picker */
+/*
+ * The way into the component editor: everything on disk on the left, a template to start
+ * from on the right. It is a dialog because it is a decision, not a panel — the editor
+ * behind it has nothing to show until the decision is made.
+ */
+
+.dialog-picker .dialog-body {
+  min-height: 0;
+}
+
+.picker {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  gap: 18px;
+  min-height: 0;
+  /* Tall enough that the gallery is a gallery, short enough to fit a laptop screen. */
+  height: min(62vh, 520px);
+}
+
+.picker-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  min-width: 0;
+}
+
+.picker-new {
+  padding-left: 18px;
+  border-left: 1px solid var(--line);
+}
+
+.picker-head h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.picker-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.picker-search > svg {
+  position: absolute;
+  left: 8px;
+  width: 13px;
+  height: 13px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.picker-search .input {
+  padding-left: 26px;
+}
+
+.picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 4px;
+}
+
+.picker-grid {
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+}
+
+.picker-templates {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.tmpl-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 9px;
+  text-align: left;
+  background: var(--sunken);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tmpl-item:hover {
+  background: var(--hover);
+}
+
+.tmpl-item.is-active {
+  border-color: var(--accent);
+}
+
+.tmpl-item span {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------- the empty editor */
+
+.editor-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  color: var(--muted);
+  text-align: center;
+}
+
+.editor-empty h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.editor-empty p {
+  margin: 0 0 4px;
+  font-size: 12px;
 }

@@ -5,10 +5,19 @@
  *
  *   components/<id>/
  *     component.json     manifest: id, name, version, params, default size
- *     shape.svg          the drawing; its viewBox sets the default size
- *     annotations.json   element id -> what that element means (port, label, ...)
+ *     document.json      the drawing, as a document — the same thing a sheet is
  *     script.js          optional behaviour, run in the sandbox
  *     README.md          optional notes
+ *
+ * A component *is* a project: what you draw a diagram with is what you draw a component
+ * with, so the drawing is stored the way a sheet is and edited by the same editor. The
+ * compiler (`src/core/library/compile.ts`) flattens that document into the SVG and
+ * annotations the runtime draws, once the libraries it draws from have loaded.
+ *
+ * Primitives have to bottom out somewhere, so a package may instead carry its drawing as
+ * markup — `shape.svg` plus an `annotations.json` saying what each element means. That is
+ * how `libs/meta` (the parts everything else is drawn from) and hand-written components
+ * are stored, and it is what `document.json` compiles down to.
  *
  * Nothing but `component.json` is required, and the other files do not have to be
  * declared: they are picked up by name. This module is the single implementation of
@@ -17,6 +26,7 @@
  */
 
 export const MANIFEST_FILE = 'component.json';
+export const DOCUMENT_FILE = 'document.json';
 export const SHAPE_FILE = 'shape.svg';
 export const ANNOTATIONS_FILE = 'annotations.json';
 export const SCRIPT_FILE = 'script.js';
@@ -166,9 +176,24 @@ export function resolvePackage(files, fallbackId = 'component') {
     typeof manifest.script === 'string' ? manifest.script : files[SCRIPT_FILE] !== undefined ? SCRIPT_FILE : null;
   if (typeof manifest.script === 'string' && text(scriptFile) === null) errors.push(`${manifest.script} is missing`);
 
+  // The drawing as a document. Present means "this component is drawn, not typed": the
+  // compiler produces the geometry and annotations from it, so whatever `shape.svg` last
+  // held is only a cache and is not read.
+  const documentFile = files[DOCUMENT_FILE] !== undefined ? DOCUMENT_FILE : null;
+  let document = null;
+  if (documentFile) {
+    try {
+      document = JSON.parse(files[documentFile]);
+    } catch (err) {
+      errors.push(`${documentFile}: ${(err && err.message) || err}`);
+    }
+  }
+
   const ids = shapeIds(text(shapeFile) ?? '');
-  for (const id of Object.keys(annotations)) {
-    if (!ids.has(id)) warnings.push(`annotation "${id}" has no element with that id in the shape`);
+  if (!documentFile) {
+    for (const id of Object.keys(annotations)) {
+      if (!ids.has(id)) warnings.push(`annotation "${id}" has no element with that id in the shape`);
+    }
   }
 
   const def = {
@@ -183,12 +208,16 @@ export function resolvePackage(files, fallbackId = 'component') {
     annotations,
     defaultSize: manifest.defaultSize || shape.size || undefined,
     resizable: manifest.resizable,
+    marker: manifest.marker,
   };
   if (scriptFile) def.script = scriptFile;
+  if (document) def.document = document;
 
   return {
     def,
     manifest,
+    document,
+    documentFile,
     shapeFile,
     annotationsFile,
     scriptFile,

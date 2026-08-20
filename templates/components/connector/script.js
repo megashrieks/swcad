@@ -19,7 +19,7 @@ defineComponent({
     return svg.path({
       d: geometry.polylinePath(pts, p.radius === undefined ? 6 : p.radius),
       fill: 'none',
-      stroke: p.stroke || '#3b4252',
+      stroke: p.stroke || 'var(--sw-ink)',
       'stroke-width': p.strokeWidth || 1.6,
       'stroke-linecap': 'round',
       'stroke-linejoin': 'round',

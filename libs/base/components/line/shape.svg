@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 1" width="80" height="1">
+  <line id="body" x1="0" y1="0" x2="80" y2="0" stroke="var(--sw-ink)" stroke-width="1.5" />
+</svg>

@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "id": "main",
+  "name": "Main",
+  "kind": "sheet",
+  "grid": {
+    "size": 40,
+    "subdivisions": 2,
+    "origin": { "x": 0, "y": 0 },
+    "unit": "px",
+    "visible": true,
+    "snap": true
+  },
+  "page": null,
+  "legend": null,
+  "meta": {
+    "title": "Maze",
+    "author": "",
+    "revision": "A",
+    "sheetNumber": 1,
+    "sheetCount": 1,
+    "date": ""
+  },
+  "nodes": [
+    {
+      "id": "n_maze",
+      "componentRef": "generative/maze",
+      "transform": { "x": 240, "y": 200, "rot": 0, "scale": 1 },
+      "size": { "w": 960, "h": 640 },
+      "params": {
+        "cols": 12,
+        "rows": 8,
+        "cell": 80,
+        "seed": 1,
+        "stroke": "var(--sw-ink)",
+        "strokeWidth": 4
+      },
+      "z": 0
+    },
+    {
+      "id": "n_start",
+      "componentRef": "base/box",
+      "transform": { "x": 268, "y": 228, "rot": 0, "scale": 1 },
+      "size": { "w": 24, "h": 24 },
+      "params": {
+        "title": "",
+        "fill": "var(--sw-accent)",
+        "stroke": "var(--sw-accent)",
+        "radius": 12
+      },
+      "z": 1
+    },
+    {
+      "id": "n_end",
+      "componentRef": "base/box",
+      "transform": { "x": 1148, "y": 788, "rot": 0, "scale": 1 },
+      "size": { "w": 24, "h": 24 },
+      "params": {
+        "title": "",
+        "fill": "var(--sw-accent)",
+        "stroke": "var(--sw-accent)",
+        "radius": 12
+      },
+      "z": 2
+    },
+    {
+      "id": "n_door_in",
+      "componentRef": "base/line",
+      "transform": { "x": 200, "y": 240, "rot": 90, "scale": 1 },
+      "size": { "w": 80, "h": 1 },
+      "params": {
+        "stroke": "var(--sw-ink)",
+        "strokeWidth": 4,
+        "dash": "none",
+        "port": "",
+        "slot": ""
+      },
+      "z": 3
+    },
+    {
+      "id": "n_door_out",
+      "componentRef": "base/line",
+      "transform": { "x": 1160, "y": 800, "rot": 90, "scale": 1 },
+      "size": { "w": 80, "h": 1 },
+      "params": {
+        "stroke": "var(--sw-ink)",
+        "strokeWidth": 4,
+        "dash": "none",
+        "port": "",
+        "slot": ""
+      },
+      "z": 4
+    }
+  ],
+  "connections": [
+    {
+      "id": "c_maze",
+      "componentRef": "base/arrow",
+      "from": { "kind": "port", "nodeId": "n_start", "portId": "body-body" },
+      "to": { "kind": "port", "nodeId": "n_end", "portId": "body-body" },
+      "waypoints": [],
+      "params": {
+        "style": "orthogonal",
+        "stroke": "var(--sw-accent)",
+        "strokeWidth": 2,
+        "radius": 0,
+        "arrow": true,
+        "startArrow": false,
+        "dashed": false,
+        "avoid": true,
+        "router": "auto",
+        "bendPenalty": 0,
+        "label": ""
+      },
+      "z": 3
+    }
+  ]
+}

@@ -2,13 +2,16 @@
   "id": "base",
   "name": "Base",
   "version": "1.0.0",
-  "description": "Built-in primitives: boxes, circles, diamonds, notes, arrows and the sheet title block.",
+  "description": "Built-in primitives: boxes, circles, diamonds, notes, arrows, the plain shapes to draw with, and the sheet title block.",
   "components": [
     "components/box",
     "components/circle",
     "components/diamond",
     "components/note",
     "components/arrow",
+    "components/line",
+    "components/arc",
+    "components/ellipse",
     "components/title-block"
   ],
   "shared": ["shared/style.js"]

@@ -4,7 +4,7 @@ defineComponent({
     var p = ctx.params;
     return {
       slots: {
-        body: { fill: p.fill || '#ffffff', stroke: p.stroke || '#2e3440', rx: String(p.radius === undefined ? 4 : p.radius) },
+        body: { fill: p.fill || 'var(--sw-surface)', stroke: p.stroke || 'var(--sw-ink)', rx: String(p.radius === undefined ? 4 : p.radius) },
       },
     };
   },

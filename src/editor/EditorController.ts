@@ -1,11 +1,13 @@
 import type { Rect, Vec } from '@core/geometry/index';
-import { dist, rectFromPoints, rectIntersects, snapTo } from '@core/geometry/index';
-import { outlineAttach, outlineBounds, outlineDistance, type Outline } from '@core/geometry/outline';
+import { dist, rectContainsRect, rectFromPoints, snapTo } from '@core/geometry/index';
+import type { RouteStyle } from '@core/geometry/routing';
+import { outlineAttach, outlineBounds, outlineDistance, type AttachGrid, type Outline } from '@core/geometry/outline';
 import type { GraphEngine, ResolvedGraph, ResolvedNodeInfo, ResolvedPortInfo } from '@core/model/graph';
+import { snapGridOf } from '@core/model/graph';
 import type { DocumentStore } from '@core/model/store';
 import { uid } from '@core/model/store';
 import type { LibraryRegistry } from '@core/library/registry';
-import type { Connection, Endpoint, Node } from '@core/model/types';
+import type { Connection, Endpoint, Node, ParamDef } from '@core/model/types';
 
 export interface Viewport {
   tx: number;
@@ -108,15 +110,43 @@ async function readSystemClipboard(): Promise<ClipboardPayload | null> {
  * Compact ports behave like discrete ones: they can be hovered and dragged from in any tool.
  */
 export function isCompactOutline(outline: Outline, bounds: Rect): boolean {
-  const area = bounds.w * bounds.h;
-  if (area <= 0) return true;
   const ob = outlineBounds(outline);
-  // Area keeps thin bars compact; the per-axis cap rejects a line or arc that spans the node.
-  return (ob.w * ob.h) / area <= 0.25 && ob.w <= bounds.w * 0.6 && ob.h <= bounds.h * 0.6;
+  // A line has no thickness and an arc very little, so one axis of the node's box is zero or
+  // near it and an area ratio says nothing useful about either. What settles it is whether the
+  // outline *spans* the node: if it does, the port is the body itself — the very thing the
+  // select tool has to be able to grab — so only the connect tool may take the click.
+  const spans = (o: number, b: number): boolean => b <= 0 || o >= b * 0.6;
+  if (spans(ob.w, bounds.w) && spans(ob.h, bounds.h)) return false;
+  // Otherwise it is a feature drawn inside a larger shape. Area keeps thin bars compact.
+  const area = bounds.w * bounds.h;
+  return area <= 0 || (ob.w * ob.h) / area <= 0.25;
+}
+
+/** The connector param the routing style lives in. Every connector component declares it. */
+const ROUTE_STYLE_PARAM = 'style';
+
+/** True when a component offers `style` as an enum that includes this router. */
+function acceptsStyle(params: readonly ParamDef[] | undefined, style: RouteStyle): boolean {
+  const def = params?.find((p) => p.name === ROUTE_STYLE_PARAM);
+  return def?.type === 'enum' && (def.options ?? []).includes(style);
 }
 
 export class EditorController {
   viewport: Viewport = { tx: 80, ty: 80, zoom: 1 };
+  /**
+   * How big the drawing surface is on screen, kept up to date by whatever is showing it.
+   * `fit` needs it, and the surface is the only thing that knows — the sheet editor and
+   * the component editor put it in different places on the page.
+   */
+  viewSize: { w: number; h: number } = { w: 0, h: 0 };
+  /**
+   * Ceiling for `fit`. A sheet can fill the surface at any magnification, but a 120×70
+   * component fitted to a whole pane would land at several hundred percent, where a
+   * two-unit nudge crosses the screen — so the component editor lowers this. It lives on
+   * the controller rather than on the call so that framing on open and the toolbar's
+   * **Fit** button cannot disagree about it.
+   */
+  fitMaxZoom = MAX_ZOOM;
   selection = new Set<string>();
   hoverId: string | null = null;
   hoverPort: ResolvedPortInfo | null = null;
@@ -125,17 +155,32 @@ export class EditorController {
   private lastPasteAt: Vec | null = null;
   tool: ToolId = 'select';
   placeRef: string | null = null;
+  /**
+   * Where the place tool sends its click when there is no component to drop. The component
+   * editor uses it to put a meta part into the shape it is drawing: the bench has one node
+   * on it - the draft - so placing there means editing that draft's file, not adding to the
+   * document. `placeRef` wins when both are set.
+   */
+  onPlace: ((world: Vec, repeat: boolean) => void) | null = null;
   drag: DragState | null = null;
   guides: Guide[] = [];
   gridLines: { x: number | null; y: number | null } = { x: null, y: null };
   snapEnabled = true;
   showPorts = true;
   /**
+   * Which router a connector drawn from here uses, and what the toolbar's routing group
+   * shows when nothing is selected. It is a tool setting rather than a document one: the
+   * style is stored per connection, so this is only the value the next one starts with.
+   */
+  connectStyle: RouteStyle = 'orthogonal';
+  /**
    * Draw every annotated port and anchor, whatever the pointer is doing. The sheet keeps
-   * them quiet until you approach a node, but the component editor's bench *is* a picture
-   * of the annotations - you are there to see which arc, line or shape is a port.
+   * them quiet until you approach a node, but in the component editor the annotations are
+   * the thing you are working on - you are there to see which shape is a port.
    */
   revealAnnotations = false;
+  /** The dashed box around a whole selected node. */
+  showNodeOutline = true;
   editingLabel: { nodeId: string; elementId: string } | null = null;
   lastError: string | null = null;
 
@@ -229,16 +274,26 @@ export class EditorController {
     this.notify();
   }
 
-  fit(viewSize: { w: number; h: number }, padding = 60): void {
+  /**
+   * Centre the drawing in the surface, zoomed to fill it.
+   *
+   * `maxZoom` defaults to `fitMaxZoom`, which is what keeps small drawings sane; see the
+   * field for why.
+   */
+  fit(viewSize: { w: number; h: number } = this.viewSize, padding = 60, maxZoom = this.fitMaxZoom): void {
+    // Nothing measured yet: fitting to a zero-sized surface would throw the view away.
+    if (viewSize.w <= 0 || viewSize.h <= 0) return;
     const bounds = this.getGraph().bounds;
     if (bounds.w <= 0 || bounds.h <= 0) {
       this.viewport = { tx: viewSize.w / 2, ty: viewSize.h / 2, zoom: 1 };
       this.notify();
       return;
     }
+    const room = Math.min(padding * 2, viewSize.w * 0.25, viewSize.h * 0.25);
     const zoom = Math.min(
+      maxZoom,
       MAX_ZOOM,
-      Math.max(MIN_ZOOM, Math.min((viewSize.w - padding * 2) / bounds.w, (viewSize.h - padding * 2) / bounds.h)),
+      Math.max(MIN_ZOOM, Math.min((viewSize.w - room) / bounds.w, (viewSize.h - room) / bounds.h)),
     );
     this.viewport = {
       zoom,
@@ -280,34 +335,12 @@ export class EditorController {
   }
 
   // ----------------------------------------------------------- hit testing
-
-  hitTest(world: Vec): { kind: 'node' | 'connection'; id: string } | null {
-    const graph = this.getGraph();
-    const pad = 6 / this.viewport.zoom;
-    for (let i = graph.order.length - 1; i >= 0; i -= 1) {
-      const info = graph.nodes.get(graph.order[i]);
-      if (!info || info.node.hidden) continue;
-      const b = info.bounds;
-      if (
-        world.x >= b.x - pad &&
-        world.x <= b.x + b.w + pad &&
-        world.y >= b.y - pad &&
-        world.y <= b.y + b.h + pad
-      ) {
-        return { kind: 'node', id: info.id };
-      }
-    }
-    for (let i = graph.connectionOrder.length - 1; i >= 0; i -= 1) {
-      const info = graph.connections.get(graph.connectionOrder[i]);
-      if (!info) continue;
-      for (let s = 1; s < info.points.length; s += 1) {
-        const a = info.points[s - 1];
-        const b = info.points[s];
-        if (distToSegment(world, a, b) <= 6 / this.viewport.zoom + 2) return { kind: 'connection', id: info.id };
-      }
-    }
-    return null;
-  }
+  //
+  // Picking what the pointer is over lives in `EditorSurface`, not here: a node is only
+  // "under the cursor" when its own drawing is, and the browser already answers that
+  // exactly — including rotation, scale, fill rules and z-order — through the SVG it
+  // painted. See `pickAt` there. Ports, handles and anchors stay geometric because they
+  // are editor furniture with their own tolerances rather than painted shapes.
 
   portAt(world: Vec, includeSurface = true): ResolvedPortInfo | null {
     const graph = this.getGraph();
@@ -320,6 +353,9 @@ export class EditorController {
     let edgeDist = Infinity;
     for (const info of graph.nodes.values()) {
       if (info.node.hidden) continue;
+      // A marker is a drawing aid in the component editor: its port exists to be *compiled*,
+      // not to be wired up, so it must not steal the click that selects or moves the marker.
+      if (info.def?.marker) continue;
       for (const port of info.ports) {
         if (port.outline) {
           // A broad surface port is the node's own body edge, so outside the connect tool it
@@ -354,7 +390,28 @@ export class EditorController {
 
   /** Where a connector should meet `port` when it arrives from `toward`. */
   portAttach(port: ResolvedPortInfo, toward: Vec): Vec {
-    return port.outline ? outlineAttach(port.outline, toward).pos : port.pos;
+    return port.outline ? outlineAttach(port.outline, toward, this.attachGrid()).pos : port.pos;
+  }
+
+  /**
+   * The lattice sliding attach points snap to. Read from the document, not from
+   * `snapEnabled`, so the preview matches the connection the graph resolves.
+   */
+  attachGrid(): AttachGrid | undefined {
+    return snapGridOf(this.store.getDocument().grid);
+  }
+
+  /**
+   * Puts the place tool away. Opening a component from the palette goes through a click that
+   * arms it, so anything that swaps what is on the canvas has to disarm it — otherwise the
+   * next click on the drawing drops a copy of the thing you opened.
+   */
+  disarmPlace(): void {
+    if (this.placeRef === null && this.onPlace === null && this.tool !== 'place') return;
+    this.placeRef = null;
+    this.onPlace = null;
+    if (this.tool === 'place') this.tool = 'select';
+    this.notify();
   }
 
   handleAt(world: Vec): { nodeId: string; handleId: string; drives: string[] } | null {
@@ -373,13 +430,24 @@ export class EditorController {
     return null;
   }
 
+  /**
+   * Everything the marquee swallowed whole.
+   *
+   * A brush that merely touches something is ambiguous — the same sweep that reaches for one
+   * component clips the neighbours it passes over — so an item joins the selection only when
+   * its whole bounding box lies inside the rect. Dragging a box *around* what you mean is the
+   * unambiguous gesture, and it is the one every CAD tool spells this way.
+   */
   nodesIn(rect: Rect): string[] {
     const graph = this.getGraph();
     const out: string[] = [];
+    // The index is queried with the rect itself: anything contained by it is also returned by
+    // an overlap query, so the containment test only ever has to reject candidates.
     for (const id of this.engine.spatial.query(rect)) {
       const info = graph.nodes.get(id) ?? graph.connections.get(id);
       if (!info) continue;
-      if (rectIntersects(rect, info.bounds)) out.push(id);
+      if ('node' in info && info.node.hidden) continue;
+      if (rectContainsRect(rect, info.bounds)) out.push(id);
     }
     return out;
   }
@@ -469,6 +537,7 @@ export class EditorController {
     const entry = this.registry.get(componentRef);
     const params: Record<string, unknown> = {};
     for (const def of entry?.def.params ?? []) params[def.name] = def.default;
+    if (acceptsStyle(entry?.def.params, this.connectStyle)) params[ROUTE_STYLE_PARAM] = this.connectStyle;
     const conn: Connection = {
       id: uid('c'),
       componentRef,
@@ -480,6 +549,49 @@ export class EditorController {
     };
     this.store.addConnection(conn);
     return conn;
+  }
+
+  /** The selected connections whose component understands `style`, in document order. */
+  private styledSelection(): Connection[] {
+    const doc = this.store.getDocument();
+    return doc.connectionOrder
+      .filter((id) => this.selection.has(id))
+      .map((id) => doc.connections[id])
+      .filter((conn): conn is Connection => !!conn && acceptsStyle(this.registry.get(conn.componentRef)?.def.params, 'straight'));
+  }
+
+  /**
+   * What the routing control should show: the style the selected connectors agree on, or
+   * `null` when they disagree. With no connector selected it is the style the next one
+   * drawn will use.
+   */
+  activeConnectStyle(): RouteStyle | null {
+    const conns = this.styledSelection();
+    if (conns.length === 0) return this.connectStyle;
+    const first = conns[0].params[ROUTE_STYLE_PARAM] ?? 'orthogonal';
+    return conns.every((c) => (c.params[ROUTE_STYLE_PARAM] ?? 'orthogonal') === first)
+      ? (first as RouteStyle)
+      : null;
+  }
+
+  /**
+   * Pick a router. Selected connectors are re-routed as one undo step, and the choice
+   * sticks as the default for the next connector drawn — so it reads as a tool setting
+   * whether or not anything is selected.
+   */
+  setConnectStyle(style: RouteStyle): void {
+    this.connectStyle = style;
+    const conns = this.styledSelection();
+    if (conns.length > 0) {
+      this.store.transact('routing', () => {
+        for (const conn of conns) {
+          this.store.updateConnection(conn.id, {
+            params: { ...conn.params, [ROUTE_STYLE_PARAM]: style },
+          });
+        }
+      });
+    }
+    this.notify();
   }
 
   deleteSelection(): void {
@@ -635,6 +747,71 @@ export class EditorController {
     this.store.setNodeOrder([...ids, ...doc.nodeOrder.filter((id) => !ids.includes(id))]);
   }
 
+  /** The selected nodes, as a set, for the paint-order walks below. */
+  private selectedInOrder(): { order: string[]; ids: Set<string> } {
+    const doc = this.store.getDocument();
+    return {
+      order: doc.nodeOrder,
+      ids: new Set([...this.selection].filter((id) => doc.nodes[id])),
+    };
+  }
+
+  /**
+   * One step forward through the paint order — over the nearest thing that is currently
+   * drawn on top of the selection.
+   *
+   * The walk starts at the front, so a run of selected nodes hops the same neighbour
+   * together and keeps its own internal order. Stepping each one in turn from the back
+   * would have them trample each other and arrive reversed.
+   */
+  moveForward(): void {
+    const { order, ids } = this.selectedInOrder();
+    if (ids.size === 0) return;
+    const next = [...order];
+    for (let i = next.length - 2; i >= 0; i -= 1) {
+      if (ids.has(next[i]) && !ids.has(next[i + 1])) [next[i], next[i + 1]] = [next[i + 1], next[i]];
+    }
+    this.store.setNodeOrder(next);
+  }
+
+  /** One step back through the paint order — under the nearest thing the selection covers. */
+  moveBackward(): void {
+    const { order, ids } = this.selectedInOrder();
+    if (ids.size === 0) return;
+    const next = [...order];
+    for (let i = 1; i < next.length; i += 1) {
+      if (ids.has(next[i]) && !ids.has(next[i - 1])) [next[i], next[i - 1]] = [next[i - 1], next[i]];
+    }
+    this.store.setNodeOrder(next);
+  }
+
+  /**
+   * Whether anything unselected is still in front of the selection — which is also the
+   * question "would forward, or front, change anything", and so what greys the buttons out.
+   */
+  canMoveForward(): boolean {
+    const { order, ids } = this.selectedInOrder();
+    const first = order.findIndex((id) => ids.has(id));
+    if (first < 0) return false;
+    for (let i = first + 1; i < order.length; i += 1) if (!ids.has(order[i])) return true;
+    return false;
+  }
+
+  /** Whether anything unselected is still behind the selection. */
+  canMoveBackward(): boolean {
+    const { order, ids } = this.selectedInOrder();
+    let last = -1;
+    for (let i = order.length - 1; i >= 0; i -= 1) {
+      if (ids.has(order[i])) {
+        last = i;
+        break;
+      }
+    }
+    if (last < 0) return false;
+    for (let i = 0; i < last; i += 1) if (!ids.has(order[i])) return true;
+    return false;
+  }
+
   align(edge: 'left' | 'right' | 'top' | 'bottom' | 'hcenter' | 'vcenter'): void {
     const nodes = this.selectedNodes();
     if (nodes.length < 2) return;
@@ -772,15 +949,6 @@ export function chooseAxisSnap(
   }
   if (gridActive) return { value: gridValue, primaryCoord: null };
   return { value: raw, primaryCoord: null };
-}
-
-function distToSegment(p: Vec, a: Vec, b: Vec): number {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const l2 = dx * dx + dy * dy;
-  if (l2 < 1e-9) return dist(p, a);
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2));
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
 export { rectFromPoints };

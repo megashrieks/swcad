@@ -1,0 +1,14 @@
+{
+  "id": "port",
+  "name": "Port",
+  "version": "1.0.0",
+  "category": "marker",
+  "description": "A pin a connector can terminate on. Put it on the edge of the shape it belongs to and rotate it to aim it outwards.",
+  "resizable": false,
+  "marker": true,
+  "params": [
+    { "name": "name", "type": "string", "label": "Name", "default": "port" },
+    { "name": "direction", "type": "enum", "label": "Direction", "default": "inout", "options": ["inout", "in", "out", "none"] },
+    { "name": "color", "type": "color", "label": "Colour", "default": "var(--sw-port)" }
+  ]
+}

@@ -1,14 +1,22 @@
 import type { ResolvedGraph } from '@core/model/graph';
 import type { LegendConfig, PageConfig, SwDocument } from '@core/model/types';
 import type { LibraryRegistry } from '@core/library/registry';
+import { resolveThemeColorsIn, type ResolvedPalette } from '@core/theme/palette';
+import { paletteColor, readCanvasPalette } from '../ui/canvasPalette';
 import { connectionMarkup, nodeMarkup, nodeTransform } from './render';
 import { legendMarkup, pageFrameParts, pageRect } from '../sheet/PageFrame';
 
 export interface ExportOptions {
   padding?: number;
+  /** A CSS colour, or `'none'` for a transparent export. Defaults to the themed paper. */
   background?: string;
   /** Export only these node ids (connections between them are kept). */
   only?: Set<string>;
+  /**
+   * Palette used to turn `var(--sw-*)` into literal colours. Defaults to the one the app
+   * is currently showing, which makes an export match the screen.
+   */
+  palette?: ResolvedPalette;
 }
 
 function contentBounds(graph: ResolvedGraph, only?: Set<string>): { x: number; y: number; w: number; h: number } {
@@ -42,14 +50,16 @@ export function exportSvg(
 ): string {
   const padding = options.padding ?? 24;
   const box = doc.page && !options.only ? pageRect(doc.page) : inflate(contentBounds(graph, options.only), padding);
+  const palette = options.palette ?? readCanvasPalette();
+  const paper = paletteColor(palette, doc.page ? '--sw-surface' : '--sw-paper', '#ffffff');
 
   const parts: string[] = [];
   if (options.background !== 'none') {
     parts.push(
-      `<rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" fill="${options.background ?? '#ffffff'}" />`,
+      `<rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" fill="${options.background ?? paper}" />`,
     );
   }
-  if (doc.page && !options.only) parts.push(pageFrameMarkup(doc.page));
+  if (doc.page && !options.only) parts.push(pageFrameMarkup(doc.page, palette));
 
   for (const info of graph.connections.values()) {
     if (options.only) {
@@ -71,36 +81,48 @@ export function exportSvg(
     parts.push(legendMarkup(doc.page, doc.legend as LegendConfig, doc.meta, registry));
   }
 
-  return [
+  const body = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${round(box.w)}" height="${round(box.h)}"`,
     ` viewBox="${round(box.x)} ${round(box.y)} ${round(box.w)} ${round(box.h)}">`,
     parts.join(''),
     '</svg>',
   ].join('');
+
+  // The file leaves the app, so nothing is left to resolve a custom property against:
+  // bake the theme's colours in. Components that hardcoded a colour are untouched.
+  return resolveThemeColorsIn(body, palette, paletteColor(palette, '--sw-ink', '#2e3440'));
 }
 
-function pageFrameMarkup(page: PageConfig): string {
+/** The paper colour an export of this document would use, for the PNG under-fill. */
+export function exportBackground(doc: SwDocument, palette: ResolvedPalette = readCanvasPalette()): string {
+  return paletteColor(palette, doc.page ? '--sw-surface' : '--sw-paper', '#ffffff');
+}
+
+function pageFrameMarkup(page: PageConfig, palette: ResolvedPalette): string {
   const { sheet, border, ticks, zones } = pageFrameParts(page);
-  // Kept in step with the `--ink-*` variables in theme.css so an export matches the screen.
+  // Kept in step with the `.page-*` rules in theme.css so an export matches the screen.
+  const lineColor = paletteColor(palette, '--sw-line', '#8a8580');
+  const frameColor = paletteColor(palette, '--sw-frame', '#3a3639');
+  const zoneColor = paletteColor(palette, '--sw-zone', '#56514f');
   const parts = [
     `<rect x="${round(sheet.x)}" y="${round(sheet.y)}" width="${round(sheet.w)}" height="${round(sheet.h)}"` +
-      ` fill="none" stroke="#8a8580" stroke-width="1.4" />`,
+      ` fill="none" stroke="${lineColor}" stroke-width="1.4" />`,
   ];
   if (border) {
     parts.push(
       `<rect x="${round(border.x)}" y="${round(border.y)}" width="${round(Math.max(border.w, 0))}"` +
-        ` height="${round(Math.max(border.h, 0))}" fill="none" stroke="#3a3639" stroke-width="1.4" />`,
+        ` height="${round(Math.max(border.h, 0))}" fill="none" stroke="${frameColor}" stroke-width="1.4" />`,
     );
   }
   for (const t of ticks) {
     parts.push(
       `<line x1="${round(t.x1)}" y1="${round(t.y1)}" x2="${round(t.x2)}" y2="${round(t.y2)}"` +
-        ` stroke="#3a3639" stroke-width="0.8" />`,
+        ` stroke="${frameColor}" stroke-width="0.8" />`,
     );
   }
   for (const z of zones) {
     parts.push(
-      `<text x="${round(z.x)}" y="${round(z.y)}" fill="#56514f" font-size="9" font-family="${ZONE_FONT}"` +
+      `<text x="${round(z.x)}" y="${round(z.y)}" fill="${zoneColor}" font-size="9" font-family="${ZONE_FONT}"` +
         ` text-anchor="middle"${z.middle ? ' dominant-baseline="middle"' : ''}>${z.text}</text>`,
     );
   }
@@ -127,7 +149,12 @@ export function downloadText(filename: string, text: string, mime = 'image/svg+x
 }
 
 /** Rasterise an exported SVG string to a PNG download. */
-export async function downloadPng(filename: string, svg: string, scale = 2): Promise<void> {
+export async function downloadPng(
+  filename: string,
+  svg: string,
+  scale = 2,
+  background = '#ffffff',
+): Promise<void> {
   const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
   try {
     const img = new Image();
@@ -141,7 +168,7 @@ export async function downloadPng(filename: string, svg: string, scale = 2): Pro
     canvas.height = Math.max(1, Math.round(img.height * scale));
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('canvas unavailable');
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = background;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     await new Promise<void>((resolve) => {

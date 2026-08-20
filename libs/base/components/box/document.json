@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "id": "box",
+  "name": "Box",
+  "kind": "component-draft",
+  "grid": {
+    "size": 10,
+    "subdivisions": 2,
+    "origin": {
+      "x": 0,
+      "y": 0
+    },
+    "unit": "px",
+    "visible": true,
+    "snap": true
+  },
+  "page": null,
+  "legend": null,
+  "meta": {
+    "title": "Box"
+  },
+  "nodes": [
+    {
+      "id": "body",
+      "componentRef": "meta/rect",
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "rot": 0,
+        "scale": 1
+      },
+      "size": {
+        "w": 160,
+        "h": 90
+      },
+      "params": {
+        "fill": "var(--sw-surface)",
+        "stroke": "var(--sw-ink)",
+        "strokeWidth": 1.5,
+        "radius": 4,
+        "dash": "none",
+        "port": "edge",
+        "slot": "body"
+      },
+      "z": 0
+    },
+    {
+      "id": "title",
+      "componentRef": "meta/label",
+      "transform": {
+        "x": 40,
+        "y": 40,
+        "rot": 0,
+        "scale": 1
+      },
+      "size": {
+        "w": 80,
+        "h": 20
+      },
+      "params": {
+        "bind": "params.title",
+        "sample": "Box",
+        "fontSize": 14,
+        "weight": "400",
+        "align": "middle",
+        "color": "var(--sw-ink)",
+        "slot": ""
+      },
+      "z": 1
+    },
+    {
+      "id": "p-n",
+      "componentRef": "meta/port",
+      "transform": {
+        "x": 68,
+        "y": -12,
+        "rot": 270,
+        "scale": 1
+      },
+      "size": {
+        "w": 24,
+        "h": 24
+      },
+      "params": {
+        "name": "north",
+        "direction": "inout",
+        "color": "var(--sw-port)"
+      },
+      "z": 2
+    },
+    {
+      "id": "p-e",
+      "componentRef": "meta/port",
+      "transform": {
+        "x": 148,
+        "y": 33,
+        "rot": 0,
+        "scale": 1
+      },
+      "size": {
+        "w": 24,
+        "h": 24
+      },
+      "params": {
+        "name": "east",
+        "direction": "inout",
+        "color": "var(--sw-port)"
+      },
+      "z": 3
+    },
+    {
+      "id": "p-s",
+      "componentRef": "meta/port",
+      "transform": {
+        "x": 68,
+        "y": 78,
+        "rot": 90,
+        "scale": 1
+      },
+      "size": {
+        "w": 24,
+        "h": 24
+      },
+      "params": {
+        "name": "south",
+        "direction": "inout",
+        "color": "var(--sw-port)"
+      },
+      "z": 4
+    },
+    {
+      "id": "p-w",
+      "componentRef": "meta/port",
+      "transform": {
+        "x": -12,
+        "y": 33,
+        "rot": 180,
+        "scale": 1
+      },
+      "size": {
+        "w": 24,
+        "h": 24
+      },
+      "params": {
+        "name": "west",
+        "direction": "inout",
+        "color": "var(--sw-port)"
+      },
+      "z": 5
+    },
+    {
+      "id": "a-top",
+      "componentRef": "meta/anchor",
+      "transform": {
+        "x": 72,
+        "y": -8,
+        "rot": 0,
+        "scale": 1
+      },
+      "size": {
+        "w": 16,
+        "h": 16
+      },
+      "params": {
+        "name": "top"
+      },
+      "z": 6
+    },
+    {
+      "id": "h-se",
+      "componentRef": "meta/handle",
+      "transform": {
+        "x": 152,
+        "y": 82,
+        "rot": 0,
+        "scale": 1
+      },
+      "size": {
+        "w": 16,
+        "h": 16
+      },
+      "params": {
+        "axis": "both",
+        "min": 40
+      },
+      "z": 7
+    }
+  ],
+  "connections": []
+}

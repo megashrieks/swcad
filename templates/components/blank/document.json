@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "{{id}}",
+  "name": "{{name}}",
+  "kind": "component-draft",
+  "grid": { "size": 10, "subdivisions": 2, "origin": { "x": 0, "y": 0 }, "unit": "px", "visible": true, "snap": true },
+  "page": null,
+  "legend": null,
+  "meta": { "title": "{{name}}" },
+  "nodes": [],
+  "connections": []
+}

@@ -1,0 +1,9 @@
+{
+  "id": "hit-area",
+  "name": "Hit area",
+  "version": "1.0.0",
+  "category": "marker",
+  "description": "An invisible region that catches the pointer, so a drawing made of thin strokes is still easy to grab.",
+  "resizable": true,
+  "params": []
+}

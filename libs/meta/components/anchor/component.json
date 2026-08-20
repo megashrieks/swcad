@@ -1,0 +1,10 @@
+{
+  "id": "anchor",
+  "name": "Anchor",
+  "version": "1.0.0",
+  "category": "marker",
+  "description": "A point other components can be pinned to, so they follow this one when it moves. Invisible once placed.",
+  "resizable": false,
+  "marker": true,
+  "params": [{ "name": "name", "type": "string", "label": "Name", "default": "anchor" }]
+}

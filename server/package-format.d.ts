@@ -1,4 +1,5 @@
-import type { Annotation, ComponentDef } from '../src/core/model/types';
+import type { SerializedDocument } from '../src/core/io/serialize';
+import type { AnnotationEntry, ComponentDef } from '../src/core/model/types';
 
 export type PackageFiles = Record<string, string>;
 
@@ -14,13 +15,16 @@ export interface ComponentManifest {
   params?: ComponentDef['params'];
   /** Override the conventional file names. `annotations` may also be inlined. */
   shape?: string;
-  annotations?: string | Record<string, Annotation>;
+  annotations?: string | Record<string, AnnotationEntry>;
   script?: string;
 }
 
 export interface ResolvedPackage {
   def: ComponentDef;
   manifest: Partial<ComponentManifest>;
+  /** The drawing as a document, when the package is drawn rather than typed. */
+  document: SerializedDocument | null;
+  documentFile: string | null;
   shapeFile: string | null;
   annotationsFile: string | null;
   scriptFile: string | null;
@@ -32,6 +36,7 @@ export interface ResolvedPackage {
 }
 
 export const MANIFEST_FILE: string;
+export const DOCUMENT_FILE: string;
 export const SHAPE_FILE: string;
 export const ANNOTATIONS_FILE: string;
 export const SCRIPT_FILE: string;

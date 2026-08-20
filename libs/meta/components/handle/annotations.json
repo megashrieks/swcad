@@ -1,0 +1,3 @@
+{
+  "body": { "kind": "handle", "drives": ["size.w", "size.h"], "axis": "{{params.axis}}", "min": "{{params.min}}" }
+}

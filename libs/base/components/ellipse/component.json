@@ -1,0 +1,53 @@
+{
+  "id": "ellipse",
+  "name": "Ellipse",
+  "version": "1.0.0",
+  "category": "shape",
+  "description": "An ellipse or circle. Give it a port name to let connectors land anywhere on it.",
+  "resizable": true,
+  "params": [
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "var(--sw-surface)"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "strokeWidth",
+      "type": "number",
+      "label": "Stroke width",
+      "default": 1.5,
+      "min": 0,
+      "step": 0.5
+    },
+    {
+      "name": "dash",
+      "type": "enum",
+      "label": "Dash",
+      "default": "none",
+      "options": [
+        "none",
+        "6 4",
+        "2 3"
+      ]
+    },
+    {
+      "name": "port",
+      "type": "string",
+      "label": "Port name",
+      "default": ""
+    },
+    {
+      "name": "slot",
+      "type": "string",
+      "label": "Style slot",
+      "default": ""
+    }
+  ]
+}

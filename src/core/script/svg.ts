@@ -71,6 +71,7 @@ const ATTR_ALLOW = new Set([
   'font-weight',
   'font-style',
   'text-anchor',
+  'text-decoration',
   'dominant-baseline',
   'letter-spacing',
   'marker-end',
@@ -939,3 +940,54 @@ export function treeBounds(nodes: VNode[]): Rect {
   }
   return out;
 }
+
+/** One drawn primitive of a component and the box it occupies, in the tree's own space. */
+export interface ElementPart {
+  /** The element's `id`, or an empty string when it has none. */
+  id: string;
+  bounds: Rect;
+}
+
+/**
+ * Every drawn primitive in the tree with a box of its own, rather than one box around the
+ * lot. A component made of separate strokes is mostly empty space, and a router handed a
+ * single bounding box either cannot get out of it or cuts straight through its siblings.
+ *
+ * A group is descended into so its children are reported individually, unless it carries a
+ * transform — then its children's boxes are in the group's own space, and the group is
+ * reported whole rather than reporting boxes in the wrong place. An `svg` root counts as a
+ * group. Elements with no area at all (text, empty groups) are left out: they are not
+ * obstacles.
+ *
+ * Each box is grown by half the stroke it is drawn with, which is the difference between
+ * the geometry and the ink. It matters most for a line: its geometric box is flat on one
+ * axis, and a rectangle with no interior cannot block anything — a drawn line would be an
+ * obstacle nothing ever collided with.
+ */
+export function elementParts(nodes: VNode[]): ElementPart[] {
+  const out: ElementPart[] = [];
+  const visit = (node: VNode): void => {
+    if ((node.tag === 'g' || node.tag === 'svg') && !node.attrs.transform) {
+      for (const child of node.children) visit(child);
+      return;
+    }
+    const box = elementBounds(node);
+    if (!Number.isFinite(box.x) || !Number.isFinite(box.y)) return;
+    if (box.w <= 0 && box.h <= 0) return;
+    const halo = strokeHalo(node);
+    out.push({
+      id: node.attrs.id ?? '',
+      bounds: halo > 0 ? rect(box.x - halo, box.y - halo, box.w + halo * 2, box.h + halo * 2) : box,
+    });
+  };
+  for (const node of nodes) visit(node);
+  return out;
+}
+
+/** How far the ink reaches past the geometry: half the stroke, or nothing if unstroked. */
+function strokeHalo(node: VNode): number {
+  const stroke = node.attrs.stroke;
+  if (!stroke || stroke === 'none' || stroke === 'transparent') return 0;
+  return num(node.attrs['stroke-width'], 1) / 2;
+}
+

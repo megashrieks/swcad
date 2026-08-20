@@ -1,4 +1,4 @@
 {
   "name": "Shape with ports",
-  "description": "A labelled block with four ports, a fill slot and a resize handle. The usual starting point."
+  "description": "A labelled box with a port on each side. The usual starting point."
 }

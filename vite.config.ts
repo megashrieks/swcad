@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { createFsMiddleware } from './server/middleware.js';
@@ -10,6 +11,7 @@ const r = (p: string) => path.resolve(root, p);
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(),
     {
       name: 'swcad-fs-api',
       configureServer(server) {

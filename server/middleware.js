@@ -268,7 +268,8 @@ async function loadTemplates() {
   return out;
 }
 
-const DEFAULT_PROJECT = {  schemaVersion: 1,
+const DEFAULT_PROJECT = {
+  schemaVersion: 1,
   title: 'Untitled Project',
   author: '',
   revision: 'A',
@@ -367,6 +368,7 @@ export function createFsMiddleware() {
         return json(res, 200, { templates: await loadTemplates() });
       }
 
+
       if (route === '/component/save' && req.method === 'POST') {
         const body = JSON.parse(await readBody(req));
         const dir = resolveSafe(body.dir);
@@ -394,6 +396,11 @@ export function createFsMiddleware() {
 
       if (route === '/fs/read') {
         const file = resolveSafe(url.searchParams.get('path'));
+        // `optional` is for files that legitimately may not exist yet, such as a sheet's
+        // undo journal: a 400 there would show up as a console error on every fresh boot.
+        if (url.searchParams.get('optional') === '1' && !fs.existsSync(file)) {
+          return json(res, 200, { content: null, missing: true });
+        }
         return json(res, 200, { content: await fsp.readFile(file, 'utf8') });
       }
 

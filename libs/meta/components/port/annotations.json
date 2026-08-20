@@ -1,0 +1,5 @@
+{
+  "aim": { "kind": "style", "attrs": { "stroke": "params.color" } },
+  "dot": { "kind": "style", "attrs": { "fill": "params.color" } },
+  "body": { "kind": "port", "name": "{{params.name}}", "direction": "{{params.direction}}", "facing": [1, 0] }
+}

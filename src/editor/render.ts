@@ -1,12 +1,14 @@
 import type { ResolvedConnectionInfo, ResolvedNodeInfo } from '@core/model/graph';
+import { defAnnotations, resolveAnnotations } from '@core/model/annotations';
 import { resolveBinding } from '@core/model/bind';
 import type { ComponentDef } from '@core/model/types';
-import { parseSvg, sanitize, serialize, treeBounds, type VNode } from '@core/script/svg';
+import { parseSvg, sanitize, serialize, treeBounds, elementPoint, findById, type VNode } from '@core/script/svg';
+import { layoutMarkdown, markdownChildren, type TextStyle } from '@core/text/markdown';
 
 /** Map fill-slot names to the element ids they control. */
 function slotElements(info: ResolvedNodeInfo): Map<string, string> {
   const out = new Map<string, string>();
-  for (const [elId, ann] of Object.entries(info.def?.annotations ?? {})) {
+  for (const [elId, ann] of defAnnotations(info.def)) {
     if (ann.kind === 'fill_slot') out.set(ann.name ?? elId, elId);
   }
   return out;
@@ -17,6 +19,7 @@ function cloneWith(
   overrides: Map<string, Record<string, string>>,
   labels: Record<string, string>,
   hitAreas: Set<string>,
+  rich: Record<string, VNode[]> = {},
 ): VNode[] {
   return nodes.map((node) => {
     const id = node.attrs.id;
@@ -26,10 +29,13 @@ function cloneWith(
       attrs.fill = attrs.fill && attrs.fill !== 'none' ? attrs.fill : 'transparent';
       attrs['pointer-events'] = 'all';
     }
+    // A markdown label is laid out as positioned spans, so it replaces both the element's
+    // own text and whatever children the shape declared.
+    if (id && rich[id]) return { tag: node.tag, attrs, children: rich[id] };
     const next: VNode = {
       tag: node.tag,
       attrs,
-      children: cloneWith(node.children, overrides, labels, hitAreas),
+      children: cloneWith(node.children, overrides, labels, hitAreas, rich),
     };
     if (id && labels[id] !== undefined) next.text = labels[id];
     else if (node.text !== undefined) next.text = node.text;
@@ -37,15 +43,23 @@ function cloneWith(
   });
 }
 
-/** Serialize a resolved node, applying script styles, label bindings and hit areas. */
-export function nodeMarkup(info: ResolvedNodeInfo): string {
+/**
+ * Serialize a resolved node, applying script styles, label bindings and hit areas.
+ *
+ * `hiddenId` blanks one element without removing it — the inline label editor uses it so
+ * the drawn text does not show through the transparent input sitting on top of it.
+ */
+export function nodeMarkup(info: ResolvedNodeInfo, hiddenId?: string | null): string {
   const slots = slotElements(info);
   const overrides = new Map<string, Record<string, string>>();
   for (const [slot, attrs] of Object.entries(info.styles ?? {})) {
     const elId = slots.get(slot) ?? slot;
-    overrides.set(elId, attrs);
+    // Declarative styling and a `style()` hook may both name the same element; the hook
+    // is applied last, so it is the one that wins attribute by attribute.
+    overrides.set(elId, { ...overrides.get(elId), ...attrs });
   }
-  const tree = cloneWith(info.vnodes, overrides, info.labels, new Set(info.hitAreas));
+  if (hiddenId) overrides.set(hiddenId, { ...overrides.get(hiddenId), visibility: 'hidden' });
+  const tree = cloneWith(info.vnodes, overrides, info.labels, new Set(info.hitAreas), info.labelNodes);
   return serialize(tree);
 }
 
@@ -81,16 +95,49 @@ export function staticMarkup(
 ): { markup: string; size: { w: number; h: number } } {
   if (!def) return { markup: '', size: { w: 0, h: 0 } };
   const tree = sanitize(parseSvg(def.geometry?.source ?? ''));
+  const params = (scope.params ?? {}) as Record<string, unknown>;
   const labels: Record<string, string> = {};
-  for (const [elId, ann] of Object.entries(def.annotations ?? {})) {
-    if (ann.kind !== 'label') continue;
-    labels[elId] = resolveBinding(scope, ann.bind);
-  }
+  const rich: Record<string, VNode[]> = {};
   const overrides = new Map<string, Record<string, string>>();
-  for (const [elId, attrs] of Object.entries(styles)) overrides.set(elId, attrs);
+  for (const [elId, ann] of resolveAnnotations(def, params)) {
+    if (ann.kind === 'label') {
+      const value = resolveBinding(scope, ann.bind);
+      labels[elId] = value;
+      const element = findById(tree, elId);
+      if (ann.markdown && element?.tag === 'text') {
+        const layout = layoutMarkdown(value, previewTextStyle(element.attrs));
+        rich[elId] = markdownChildren(layout, elementPoint(element));
+      }
+    } else if (ann.kind === 'style') {
+      const attrs: Record<string, string> = { ...overrides.get(elId) };
+      for (const [attr, binding] of Object.entries(ann.attrs ?? {})) {
+        const value = resolveBinding(scope, binding);
+        if (value !== '') attrs[attr] = value;
+      }
+      overrides.set(elId, attrs);
+    }
+  }
+  for (const [elId, attrs] of Object.entries(styles)) overrides.set(elId, { ...overrides.get(elId), ...attrs });
   const box = treeBounds(tree);
   return {
-    markup: serialize(cloneWith(tree, overrides, labels, new Set())),
+    markup: serialize(cloneWith(tree, overrides, labels, new Set(), rich)),
     size: def.defaultSize ?? { w: box.w, h: box.h },
+  };
+}
+
+/**
+ * Base style for a markdown preview. Outside the graph there is no ancestor chain to
+ * inherit from, so only the element's own attributes are read.
+ */
+function previewTextStyle(attrs: Record<string, string>): TextStyle {
+  const size = Number(attrs['font-size']);
+  return {
+    family: attrs['font-family'] ?? 'Inter, Segoe UI, sans-serif',
+    monoFamily: 'JetBrains Mono, Consolas, monospace',
+    size: Number.isFinite(size) ? size : 12,
+    weight: attrs['font-weight'] ?? '400',
+    style: attrs['font-style'] ?? 'normal',
+    letterSpacing: Number(attrs['letter-spacing']) || 0,
+    color: attrs.fill ?? 'var(--sw-ink, #2e3440)',
   };
 }

@@ -1,11 +1,25 @@
 import { useEffect, useRef } from 'react';
 import type { GridConfig } from '@core/model/types';
+import { paletteColor, useCanvasPalette } from '../../ui/canvasPalette';
 import type { Guide, Viewport } from '../EditorController';
 
 interface Size {
   w: number;
   h: number;
 }
+
+/**
+ * Snaps a 1px stroke to the pixel it should cover.
+ *
+ * A 1px canvas line is painted half a pixel either side of the coordinate given, so it
+ * only comes out crisp when that coordinate is a half-integer. `round(v) + 0.5` is the
+ * usual trick, but it is biased: it shifts every line between a quarter and a whole pixel
+ * *down and to the right* of the coordinate it claims to be at, which is exactly the
+ * direction the SVG content is not moved in. Rounding to the nearest half-integer instead
+ * keeps the line just as crisp with at most half a pixel of error either way, so the
+ * lattice and the drawing agree about where a grid line is.
+ */
+const crisp = (v: number): number => Math.floor(v) + 0.5;
 
 function setupCanvas(canvas: HTMLCanvasElement, size: Size): CanvasRenderingContext2D | null {
   const dpr = window.devicePixelRatio || 1;
@@ -44,6 +58,14 @@ export function GridLayer({
   const pageW = page?.w ?? null;
   const pageH = page?.h ?? null;
 
+  const palette = useCanvasPalette();
+  // Read out here rather than inside the effect so the deps stay primitive and the layer
+  // repaints the moment the theme changes.
+  const paper = paletteColor(palette, '--sw-surface', '#ffffff');
+  const minorColor = paletteColor(palette, '--sw-grid-minor', '#ece9e6');
+  const majorColor = paletteColor(palette, '--sw-grid-major', '#dcd7d1');
+  const axisColor = paletteColor(palette, '--sw-grid-axis', '#c8c2ba');
+
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
@@ -52,7 +74,7 @@ export function GridLayer({
 
     const hasPage = pageX !== null && pageY !== null && pageW !== null && pageH !== null;
     if (hasPage) {
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = paper;
       ctx.fillRect(pageX * zoom + tx, pageY * zoom + ty, pageW * zoom, pageH * zoom);
     }
 
@@ -77,35 +99,54 @@ export function GridLayer({
       ctx.lineWidth = width;
       const startX = Math.floor((worldLeft - originX) / spacing) * spacing + originX;
       for (let x = startX; x <= worldRight; x += spacing) {
-        const sx = Math.round(x * zoom + tx) + 0.5;
+        const sx = crisp(x * zoom + tx);
         ctx.moveTo(sx, 0);
         ctx.lineTo(sx, h);
       }
       const startY = Math.floor((worldTop - originY) / spacing) * spacing + originY;
       for (let y = startY; y <= worldBottom; y += spacing) {
-        const sy = Math.round(y * zoom + ty) + 0.5;
+        const sy = crisp(y * zoom + ty);
         ctx.moveTo(0, sy);
         ctx.lineTo(w, sy);
       }
       ctx.stroke();
     };
 
-    drawLines(step, '#ece9e6', 1);
+    drawLines(step, minorColor, 1);
     const major = step * (subdivisions > 1 ? subdivisions : 4);
-    if (major * zoom >= 12) drawLines(major, '#dcd7d1', 1);
+    if (major * zoom >= 12) drawLines(major, majorColor, 1);
 
     // Origin axes
     ctx.beginPath();
-    ctx.strokeStyle = '#c8c2ba';
+    ctx.strokeStyle = axisColor;
     ctx.lineWidth = 1;
-    const ox = Math.round(originX * zoom + tx) + 0.5;
-    const oy = Math.round(originY * zoom + ty) + 0.5;
+    const ox = crisp(originX * zoom + tx);
+    const oy = crisp(originY * zoom + ty);
     ctx.moveTo(ox, 0);
     ctx.lineTo(ox, h);
     ctx.moveTo(0, oy);
     ctx.lineTo(w, oy);
     ctx.stroke();
-  }, [tx, ty, zoom, w, h, gridSize, subdivisions, originX, originY, visible, pageX, pageY, pageW, pageH]);
+  }, [
+    tx,
+    ty,
+    zoom,
+    w,
+    h,
+    gridSize,
+    subdivisions,
+    originX,
+    originY,
+    visible,
+    pageX,
+    pageY,
+    pageW,
+    pageH,
+    paper,
+    minorColor,
+    majorColor,
+    axisColor,
+  ]);
 
   return <canvas ref={ref} className="layer" style={{ width: w, height: h }} />;
 }
@@ -161,6 +202,11 @@ export function HighlightLayer({
   const { w, h } = size;
   const { x: gridLineX, y: gridLineY } = gridLines;
 
+  const palette = useCanvasPalette();
+  const bandColor = paletteColor(palette, '--sw-highlight', 'rgba(18, 128, 146, 0.10)');
+  const guideColor = paletteColor(palette, '--sw-guide', '#c07d16');
+  const guideWeakColor = paletteColor(palette, '--sw-guide-weak', 'rgba(192, 125, 22, 0.35)');
+
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
@@ -168,7 +214,7 @@ export function HighlightLayer({
     if (!ctx || !active) return;
 
     // Highlighted grid row/column under the pointer, painted first as a subtle band.
-    ctx.fillStyle = 'rgba(18, 128, 146, 0.10)';
+    ctx.fillStyle = bandColor;
     if (gridLineX !== null) {
       const sx = gridLineX * zoom + tx;
       ctx.fillRect(sx - (gridSize * zoom) / 2, 0, gridSize * zoom, h);
@@ -187,7 +233,7 @@ export function HighlightLayer({
       ctx.setLineDash(dashed ? [5, 4] : []);
       ctx.beginPath();
       for (const line of subset) {
-        const at = Math.round(line.screen) + 0.5;
+        const at = crisp(line.screen);
         if (line.axis === 'x') {
           ctx.moveTo(at, 0);
           ctx.lineTo(at, h);
@@ -202,18 +248,32 @@ export function HighlightLayer({
     // Secondaries drawn first (faint context), primaries last so the snapped guide sits on top.
     strokeLines(
       lines.filter((l) => !l.primary),
-      'rgba(192, 125, 22, 0.35)',
+      guideWeakColor,
       1,
       false,
     );
     strokeLines(
       lines.filter((l) => l.primary),
-      '#c07d16',
+      guideColor,
       1.5,
       true,
     );
     ctx.setLineDash([]);
-  }, [tx, ty, zoom, w, h, guides, gridLineX, gridLineY, gridSize, active]);
+  }, [
+    tx,
+    ty,
+    zoom,
+    w,
+    h,
+    guides,
+    gridLineX,
+    gridLineY,
+    gridSize,
+    active,
+    bandColor,
+    guideColor,
+    guideWeakColor,
+  ]);
 
   return <canvas ref={ref} className="layer" style={{ width: w, height: h }} />;
 }

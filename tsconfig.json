@@ -16,7 +16,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "exactOptionalPropertyTypes": false,
-    "types": ["node", "vitest/globals", "vite/client"],
+    "types": ["node", "vite/client"],
     "baseUrl": ".",
     "paths": {
       "@core/*": ["src/core/*"],

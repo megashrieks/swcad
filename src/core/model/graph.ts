@@ -1,14 +1,23 @@
 import type { Rect, Transform, Vec } from '../geometry/index';
 import * as geometryApi from '../geometry/index';
-import { boundsOf, rect, rectUnion, toWorld, transformedBounds, rotate, norm } from '../geometry/index';
-import { arrowHead, route as routeBetween } from '../geometry/routing';
-import { outlineAttach, outlineCenter, type Outline } from '../geometry/outline';
+import { boundsOf, inflate, rect, rectContains, rectIntersects, rectUnion, toWorld, transformedBounds, rotate, norm } from '../geometry/index';
+import { arrowHead, route as routeBetween, routeOrthogonalBest } from '../geometry/routing';
+import type { RouteEndpoint } from '../geometry/routing';
+import {
+  isClosedOutline,
+  outlineAttach,
+  outlineBounds,
+  outlineCenter,
+  type AttachGrid,
+  type Outline,
+} from '../geometry/outline';
 import type { ComponentEntry, LibraryRegistry } from '../library/registry';
 import { compileScript, callHook, type CompiledScript } from '../script/sandbox';
 import { DependencyTracker, depKeys } from '../script/tracker';
 import {
   elementBounds,
   elementOutline,
+  elementParts,
   elementPoint,
   findById,
   parseSvg,
@@ -17,9 +26,13 @@ import {
   svgBuilder,
   treeBounds,
   walk,
+  type ElementPart,
   type VNode,
 } from '../script/svg';
 import { AlignmentIndex, SpatialHash } from '../spatial/index';
+import { layoutMarkdown, markdownBounds, markdownChildren, type TextStyle } from '../text/markdown';
+import { measureWidth, type FontSpec } from '../text/measure';
+import { resolveAnnotations } from './annotations';
 import { resolveBinding } from './bind';
 import type { DocumentStore, Change } from './store';
 import type {
@@ -44,6 +57,66 @@ function routingGridOf(grid: GridConfig): { grid?: number; gridOrigin?: Vec } {
   return { grid: step, gridOrigin: { x: grid.origin?.x ?? 0, y: grid.origin?.y ?? 0 } };
 }
 
+/**
+ * The same lattice, for pulling a sliding attach point onto a grid line. The editor's
+ * connect preview has to use this too, or the point it draws would not be the one the
+ * resolved connection ends up on.
+ */
+export function snapGridOf(grid: GridConfig): AttachGrid | undefined {
+  const { grid: step, gridOrigin } = routingGridOf(grid);
+  return step ? { step, origin: gridOrigin } : undefined;
+}
+
+/** Directions sampled around a sliding port when picking where a connector lands. */
+const ATTACH_SAMPLES = 24;
+
+interface Attach {
+  pos: Vec;
+  facing: Vec;
+  outline?: Outline;
+  portId?: string;
+  group?: string[];
+  error?: string;
+}
+
+/**
+ * Every spot on a sliding port a connector might reasonably land on.
+ *
+ * The shape is sampled by direction rather than by arc length, because that is the aim a
+ * port already understands: `settle` turns a point to aim at into the place on the shape a
+ * ray from its centre leaves, along with the normal there. Sampling evenly around the
+ * circle therefore covers a circle evenly, and a rectangle by its faces and corners, with
+ * no per-shape code. Duplicates — several directions that land on the same corner of a
+ * polygon — are dropped so they are not routed twice.
+ */
+function attachCandidates(ep: Attach, settle: (ep: Attach, toward: Vec) => Attach): Attach[] {
+  if (!ep.outline) return [ep];
+  const c = outlineCenter(ep.outline);
+  const box = outlineBounds(ep.outline);
+  const reach = Math.max(box.w, box.h) + 1;
+  const out: Attach[] = [];
+  for (let i = 0; i < ATTACH_SAMPLES; i += 1) {
+    const a = (i / ATTACH_SAMPLES) * Math.PI * 2;
+    const hit = settle(ep, { x: c.x + Math.cos(a) * reach, y: c.y + Math.sin(a) * reach });
+    if (out.some((p) => Math.hypot(p.pos.x - hit.pos.x, p.pos.y - hit.pos.y) < 1e-6)) continue;
+    out.push(hit);
+  }
+  return out.length > 0 ? out : [ep];
+}
+
+/**
+ * Whether anything stands between two points. Rects covering either point are the nodes
+ * those points belong to, which a route leaves rather than avoids.
+ *
+ * With a clear span the shortest route is the direct one, so the point on each shape facing
+ * the other is already the best there is and the search below would only confirm it at the
+ * cost of routing it a hundred times over. Nearly every connection on a sheet is this case.
+ */
+function obstructedBetween(a: Vec, b: Vec, obstacles: Rect[]): boolean {
+  const span = boundsOf([a, b]);
+  return obstacles.some((r) => !rectContains(r, a) && !rectContains(r, b) && rectIntersects(r, span));
+}
+
 export interface ResolvedPortInfo {
   id: string;
   name: string;
@@ -55,6 +128,13 @@ export interface ResolvedPortInfo {
   localPos: Vec;
   /** Set when the whole element edge is connectable; `pos` is then its centre. */
   outline?: Outline;
+  /**
+   * Ids of every port on this node that shares this `name`, in declaration order,
+   * present only when there is more than one. Same-named ports are one logical port:
+   * a connector attaches to whichever member is easiest to reach, and they report a
+   * shared connection list.
+   */
+  group?: string[];
   connected: boolean;
   connections: string[];
 }
@@ -98,10 +178,21 @@ export interface ResolvedNodeInfo {
   vnodes: VNode[];
   localBounds: Rect;
   bounds: Rect;
+  /**
+   * World-space box of each drawn primitive, keyed by element id where it has one. A
+   * connector leaving a port on one primitive has to dodge the others, which a single
+   * node-wide box cannot express.
+   */
+  parts: ElementPart[];
   ports: ResolvedPortInfo[];
   anchors: ResolvedAnchorInfo[];
   handles: ResolvedHandleInfo[];
   labels: Record<string, string>;
+  /**
+   * Rendered children of a markdown label, replacing the element's own text. Present only
+   * for elements whose `label` annotation sets `markdown`.
+   */
+  labelNodes: Record<string, VNode[]>;
   /** World-space rect of each label-annotated element, keyed by SVG element id. */
   labelBoxes: Record<string, Rect>;
   /** How each label is drawn (world units), so the inline editor can match it. */
@@ -133,15 +224,21 @@ export interface ResolvedGraph {
 
 const DEFAULT_SIZE = { w: 100, h: 60 };
 
-/** Rough advance width per character, as a fraction of the font size. */
-const GLYPH_RATIO = 0.58;
-
 /** Rough vertical metrics, as fractions of the font size. */
 const X_HEIGHT_RATIO = 0.52;
 const ASCENT_RATIO = 0.8;
 const DESCENT_RATIO = 0.2;
 
 const DEFAULT_FONT = 'Inter, Segoe UI, sans-serif';
+const MONO_FONT = 'JetBrains Mono, Consolas, monospace';
+
+/**
+ * Ink for anything the engine draws without being told a colour. It borrows from the
+ * canvas palette so an unstyled label or connector follows the theme; the fallback is the
+ * old fixed value, for the exporter and for any context with no stylesheet.
+ */
+const DEFAULT_INK = 'var(--sw-ink, #2e3440)';
+const DEFAULT_CONNECTOR_STROKE = 'var(--sw-ink, #3b4252)';
 
 /** SVG presentation attributes a `<text>` inherits from its ancestors. */
 const INHERITED_TEXT_ATTRS = [
@@ -192,7 +289,7 @@ function labelStyle(attrs: Record<string, string>, scale: number): LabelStyle {
     fontWeight: attrs['font-weight'] ?? 'normal',
     fontStyle: attrs['font-style'] ?? 'normal',
     letterSpacing: numAttr(attrs['letter-spacing'], 0) * scale,
-    color: attrs.fill ?? '#2e3440',
+    color: attrs.fill ?? DEFAULT_INK,
     anchor: anchor === 'middle' || anchor === 'end' ? anchor : 'start',
   };
 }
@@ -229,7 +326,7 @@ function baselineShift(attrs: Record<string, string>, size: number): number {
  * labels on the same component apart, so text is measured from its font size and content.
  * The box hangs off the baseline, one font size up and a quarter down.
  */
-function labelBounds(
+export function labelBounds(
   element: VNode | null | undefined,
   fallback: Vec,
   text: string,
@@ -237,16 +334,49 @@ function labelBounds(
 ): Rect {
   if (!element) return rect(fallback.x, fallback.y, 0, 0);
   if (element.tag !== 'text') return elementBounds(element);
-  const size = numAttr(attrs['font-size'], 12);
-  const spacing = numAttr(attrs['letter-spacing'], 0);
-  const chars = Math.max(text.length, 1);
-  const w = chars * (size * GLYPH_RATIO + spacing);
-  const h = size * 1.25;
+  const font = textFont(attrs);
+  const w = measureWidth(text, font);
+  const h = font.size * 1.25;
   const x = numAttr(element.attrs.x, 0);
-  const baseline = numAttr(element.attrs.y, 0) + baselineShift(attrs, size);
+  const baseline = numAttr(element.attrs.y, 0) + baselineShift(attrs, font.size);
   const anchor = attrs['text-anchor'];
   const left = anchor === 'middle' ? x - w / 2 : anchor === 'end' ? x - w : x;
-  return rect(left, baseline - size, w, h);
+  return rect(left, baseline - font.size, w, h);
+}
+
+/** The font a `<text>` draws with, from its own and its ancestors' presentation attributes. */
+function textFont(attrs: Record<string, string>): FontSpec {
+  return {
+    family: attrs['font-family'] ?? DEFAULT_FONT,
+    size: numAttr(attrs['font-size'], 12),
+    weight: attrs['font-weight'] ?? '400',
+    style: attrs['font-style'] ?? 'normal',
+    letterSpacing: numAttr(attrs['letter-spacing'], 0),
+  };
+}
+
+/** The same, as the base style a markdown block is laid out against. */
+function markdownStyle(attrs: Record<string, string>): TextStyle {
+  const font = textFont(attrs);
+  return { ...font, monoFamily: MONO_FONT, color: attrs.fill ?? DEFAULT_INK };
+}
+
+/**
+ * A node's local box, with `<text>` measured rather than reported as its bare anchor point.
+ * A component that draws only text — a standalone label — would otherwise have a zero-sized
+ * box and be impossible to hover, select or drag.
+ */
+export function boundsWithText(vnodes: VNode[], skip?: Set<string>): Rect {
+  let box = treeBounds(vnodes);
+  const visit = (vnode: VNode): void => {
+    if (vnode.tag === 'text' && !(vnode.attrs.id && skip?.has(vnode.attrs.id))) {
+      const measured = labelBounds(vnode, { x: 0, y: 0 }, vnode.text ?? '', vnode.attrs);
+      if (measured.w > 0 && measured.h > 0) box = rectUnion(box, measured);
+    }
+    for (const child of vnode.children) visit(child);
+  };
+  for (const vnode of vnodes) visit(vnode);
+  return box;
 }
 
 /** Cheap stable hash used to memoise static geometry compilation. */
@@ -255,7 +385,7 @@ function hashParams(params: Record<string, unknown>, size: { w: number; h: numbe
 }
 
 /** Lift a local-space element outline into world space through the node transform. */
-function toWorldOutline(outline: Outline | null, t: Transform): Outline | null {
+export function toWorldOutline(outline: Outline | null, t: Transform): Outline | null {
   if (!outline) return null;
   if (outline.kind === 'polygon') {
     return { kind: 'polygon', points: outline.points.map((p) => toWorld(t, p)), closed: outline.closed };
@@ -267,6 +397,19 @@ function toWorldOutline(outline: Outline | null, t: Transform): Outline | null {
     ry: outline.ry * t.scale,
     rot: outline.rot + t.rot,
   };
+}
+
+/** How far past the endpoints (and past each obstacle found) the router looks for more. */
+const ROUTE_QUERY_MARGIN = 80;
+
+/**
+ * World-space box of each drawn primitive of a node. Falls back to the node's own bounds
+ * for a component with nothing drawn in it.
+ */
+function worldParts(vnodes: VNode[], t: Transform, bounds: Rect): ElementPart[] {
+  const parts = elementParts(vnodes);
+  if (parts.length === 0) return [{ id: '', bounds }];
+  return parts.map((p) => ({ id: p.id, bounds: transformedBounds(t, p.bounds) }));
 }
 
 export interface GraphEngineOptions {
@@ -466,8 +609,22 @@ export class GraphEngine {
     const resolving = new Set<string>();
     // Rotation turns about the middle of the instance box, not its top-left corner,
     // so a rotated shape stays where it was drawn instead of swinging away.
-    const withPivot = (t: Transform, node: Node): Transform =>
-      t.rot ? { ...t, pivot: { x: node.size.w / 2, y: node.size.h / 2 } } : t;
+    //
+    // A drawing with no thickness on an axis turns about the drawing itself instead.
+    // `base/line` draws along the top edge of a nominally 1-unit-tall box, so the box
+    // centre sits half a unit below the line; a quarter turn would carry that half unit
+    // onto the other axis and leave the line off the grid for good. Pivoting on the line
+    // keeps it on the lattice at every right angle.
+    const withPivot = (t: Transform, node: Node, bounds: Rect): Transform =>
+      t.rot
+        ? {
+            ...t,
+            pivot: {
+              x: bounds.w > 0 ? node.size.w / 2 : bounds.x,
+              y: bounds.h > 0 ? node.size.h / 2 : bounds.y,
+            },
+          }
+        : t;
     const effectiveOf = (id: string): Transform => {
       const cached = effective.get(id);
       if (cached) return cached;
@@ -475,13 +632,13 @@ export class GraphEngine {
       if (!info) return { x: 0, y: 0, rot: 0, scale: 1 };
       const attachment = info.node.attachment;
       if (!attachment || resolving.has(id)) {
-        const own = withPivot(info.node.transform, info.node);
+        const own = withPivot(info.node.transform, info.node, info.localBounds);
         effective.set(id, own);
         return own;
       }
       resolving.add(id);
       const parent = base.get(attachment.parentId);
-      let result = withPivot(info.node.transform, info.node);
+      let result = withPivot(info.node.transform, info.node, info.localBounds);
       if (parent) {
         const parentT = effectiveOf(attachment.parentId);
         const anchorLocal = localAnchorPoint(parent.entry?.def ?? null, parent.vnodes, attachment.anchorId);
@@ -528,10 +685,12 @@ export class GraphEngine {
         vnodes: info.vnodes,
         localBounds: info.localBounds,
         bounds: rect(),
+        parts: [],
         ports: [],
         anchors: [],
         handles: [],
         labels: {},
+        labelNodes: {},
         labelBoxes: {},
         labelStyles: {},
         styles: {},
@@ -550,12 +709,16 @@ export class GraphEngine {
       const local = (p: Vec): Vec => toWorld(resolved.effective, p);
 
       // ports / anchors / handles from static annotations
+      const labelLocal = new Map<string, Rect>();
       const collect = (): void => {
         resolved.ports = [];
         resolved.anchors = [];
         resolved.handles = [];
         resolved.hitAreas = [];
-        for (const [elId, ann] of Object.entries(def?.annotations ?? {})) {
+        resolved.styles = {};
+        resolved.labelNodes = {};
+        labelLocal.clear();
+        for (const [elId, ann] of resolveAnnotations(def, info.node.params)) {
           const element = findById(resolved.vnodes, elId);
           const point = element ? elementPoint(element) : { x: 0, y: 0 };
           if (ann.kind === 'port') {
@@ -592,6 +755,16 @@ export class GraphEngine {
             });
           } else if (ann.kind === 'hit_area') {
             resolved.hitAreas.push(elId);
+          } else if (ann.kind === 'style') {
+            // Attributes the instance decides: the same thing a `style()` hook returns,
+            // declared instead of coded. Element ids double as slot names in `render.ts`.
+            const scope = { params: info.node.params, node: info.node, meta: doc.meta, size: info.node.size };
+            const attrs: Record<string, string> = { ...resolved.styles[elId] };
+            for (const [attr, binding] of Object.entries(ann.attrs ?? {})) {
+              const value = resolveBinding(scope, binding);
+              if (value !== '') attrs[attr] = value;
+            }
+            if (Object.keys(attrs).length > 0) resolved.styles[elId] = attrs;
           } else if (ann.kind === 'label') {
             const value = resolveBinding(
               { params: info.node.params, node: info.node, meta: doc.meta, size: info.node.size },
@@ -600,12 +773,19 @@ export class GraphEngine {
             const attrs = inheritedTextAttrs(findPath(resolved.vnodes, elId));
             resolved.labels[elId] = value;
             resolved.labelStyles[elId] = labelStyle(attrs, resolved.effective.scale);
-            resolved.labelBoxes[elId] = transformedBounds(
-              resolved.effective,
-              labelBounds(element, point, value, attrs),
-            );
+            const localBox =
+              ann.markdown && element?.tag === 'text'
+                ? (() => {
+                    const layout = layoutMarkdown(value, markdownStyle(attrs));
+                    resolved.labelNodes[elId] = markdownChildren(layout, point);
+                    return markdownBounds(layout, point);
+                  })()
+                : labelBounds(element, point, value, attrs);
+            labelLocal.set(elId, localBox);
+            resolved.labelBoxes[elId] = transformedBounds(resolved.effective, localBox);
           }
         }
+        linkPortGroups(resolved);
       };
       collect();
 
@@ -620,7 +800,7 @@ export class GraphEngine {
           const cached = !this.dirty.has(cacheKey) ? this.renderCache.get(cacheKey) : undefined;
           if (cached) {
             if (cached.vnodes.length > 0) resolved.vnodes = cached.vnodes;
-            resolved.styles = cached.styles;
+            resolved.styles = { ...resolved.styles, ...cached.styles };
             resolved.logs = cached.logs;
             resolved.error = cached.error;
             if (Array.isArray(cached.ports)) applyDynamicPorts(resolved, cached.ports as DynamicPort[], local, portConnections);
@@ -642,7 +822,7 @@ export class GraphEngine {
             const styles = result.styled.value?.slots ?? {};
             const error = result.rendered.error ?? result.styled.error ?? result.ports.error;
             if (vnodes.length > 0) resolved.vnodes = vnodes;
-            resolved.styles = styles;
+            resolved.styles = { ...resolved.styles, ...styles };
             resolved.logs = logs;
             if (error) resolved.error = error;
             if (Array.isArray(result.ports.value)) {
@@ -661,9 +841,17 @@ export class GraphEngine {
         }
       }
 
-      const localBox = treeBounds(resolved.vnodes);
+      // Dynamic ports may have joined (or renamed) a group since the static pass.
+      linkPortGroups(resolved);
+      let localBox = boundsWithText(resolved.vnodes, new Set(labelLocal.keys()));
+      // A bound label draws its *value*, which is rarely the sample text sitting in the
+      // shape, so the box the graph measured for it is the one that counts.
+      for (const box of labelLocal.values()) {
+        if (box.w > 0 || box.h > 0) localBox = rectUnion(localBox, box);
+      }
       resolved.localBounds = localBox;
       resolved.bounds = transformedBounds(resolved.effective, localBox);
+      resolved.parts = worldParts(resolved.vnodes, resolved.effective, resolved.bounds);
       if (resolved.error) errors.push({ id, message: resolved.error });
     }
 
@@ -746,6 +934,7 @@ export class GraphEngine {
         facing: { ...p.facing },
         connected: p.connected,
         direction: p.direction,
+        ...(p.group ? { group: [...p.group] } : {}),
       })),
     });
 
@@ -769,8 +958,15 @@ export class GraphEngine {
       },
       connectionsOf(nodeId: string, portId?: string) {
         tracker.read(depKeys.portsOf(nodeId));
+        // A port id that belongs to a same-named group answers for the whole group.
+        const group = portId
+          ? nodes
+              .get(nodeId)
+              ?.ports.find((p) => p.id === portId)?.group
+          : undefined;
+        const keys = portId ? (group ?? [portId]).map((id) => `${nodeId}:${id}`) : [];
         const ids = portId
-          ? (portConnections.get(`${nodeId}:${portId}`) ?? [])
+          ? [...new Set(keys.flatMap((key) => portConnections.get(key) ?? []))]
           : [...portConnections.entries()]
               .filter(([key]) => key.startsWith(`${nodeId}:`))
               .flatMap(([, list]) => list);
@@ -832,6 +1028,7 @@ export class GraphEngine {
             pos: Object.freeze({ ...p.pos }),
             localPos: Object.freeze({ ...p.localPos }),
             facing: Object.freeze({ ...p.facing }),
+            ...(p.group ? { group: Object.freeze([...p.group]) } : {}),
           }),
         ),
       ),
@@ -858,13 +1055,26 @@ export class GraphEngine {
     nodes: Map<string, ResolvedNodeInfo>,
     graphApi: Record<string, unknown>,
   ): ResolvedConnectionInfo {
-    const resolveEndpoint = (ep: Endpoint): { pos: Vec; facing: Vec; outline?: Outline; error?: string } => {
+    const attachGrid = snapGridOf(doc.grid);
+    const resolveEndpoint = (
+      ep: Endpoint,
+      aim?: Vec,
+    ): { pos: Vec; facing: Vec; outline?: Outline; portId?: string; group?: string[]; error?: string } => {
       if (ep.kind === 'free') return { pos: { x: ep.x, y: ep.y }, facing: { x: 0, y: 0 } };
       const target = nodes.get(ep.nodeId);
       if (!target) return { pos: { x: 0, y: 0 }, facing: { x: 0, y: 0 }, error: `missing node '${ep.nodeId}'` };
       if (ep.kind === 'port') {
-        const port = target.ports.find((p) => p.id === ep.portId);
-        if (port) return { pos: port.pos, facing: port.facing, ...(port.outline ? { outline: port.outline } : {}) };
+        const stored = target.ports.find((p) => p.id === ep.portId);
+        if (stored) {
+          const port = pickGroupMember(target, stored, aim, attachGrid);
+          return {
+            pos: port.pos,
+            facing: port.facing,
+            portId: port.id,
+            ...(port.group ? { group: port.group } : {}),
+            ...(port.outline ? { outline: port.outline } : {}),
+          };
+        }
         return {
           pos: { x: target.bounds.x + target.bounds.w / 2, y: target.bounds.y + target.bounds.h / 2 },
           facing: { x: 0, y: 0 },
@@ -889,30 +1099,161 @@ export class GraphEngine {
       toward: Vec,
     ): { pos: Vec; facing: Vec; error?: string } => {
       if (!ep.outline) return { pos: ep.pos, facing: ep.facing, ...(ep.error ? { error: ep.error } : {}) };
-      const hit = outlineAttach(ep.outline, toward);
+      const hit = outlineAttach(ep.outline, toward, attachGrid);
       return { pos: hit.pos, facing: hit.facing, ...(ep.error ? { error: ep.error } : {}) };
     };
 
-    const fromRaw = resolveEndpoint(conn.from);
-    const toRaw = resolveEndpoint(conn.to);
-    const from = settle(fromRaw, conn.waypoints[0] ?? toRaw.pos);
-    const to = settle(toRaw, conn.waypoints[conn.waypoints.length - 1] ?? fromRaw.pos);
+    const firstWaypoint = conn.waypoints[0];
+    const lastWaypoint = conn.waypoints[conn.waypoints.length - 1];
+    // Same-named ports are one logical port, and choosing between their pins needs to
+    // know where the other end is — so a grouped endpoint is resolved twice: once to
+    // supply that aim, once to commit to the member nearest it.
+    const fromFirst = resolveEndpoint(conn.from);
+    const toFirst = resolveEndpoint(conn.to);
+    const fromRaw = fromFirst.group ? resolveEndpoint(conn.from, firstWaypoint ?? toFirst.pos) : fromFirst;
+    const toRaw = toFirst.group ? resolveEndpoint(conn.to, lastWaypoint ?? fromRaw.pos) : toFirst;
+    const from0 = settle(fromRaw, firstWaypoint ?? toRaw.pos);
+    const to0 = settle(toRaw, lastWaypoint ?? fromRaw.pos);
     const entry = this.registry.get(conn.componentRef);
     const compiled = this.script(entry);
     const logs: string[] = [];
 
     const avoid = conn.params.avoid !== false;
+    // The box a stub has to clear before the search takes over. For a port drawn on one
+    // primitive of a multi-part component that is the primitive itself, not the whole
+    // node: the stub only has to get off its own stroke, and the siblings it must dodge
+    // are handed to the router as ordinary obstacles below. Ports without a shape of
+    // their own keep the old whole-node behaviour, since there is nothing finer to use.
+    const ownerPart = (ep: Endpoint, chosenPortId?: string): Rect | undefined => {
+      if (!avoid || ep.kind === 'free') return undefined;
+      const info = nodes.get(ep.nodeId);
+      if (!info) return undefined;
+      if (ep.kind !== 'port' || info.hitAreas.length > 0) return info.bounds;
+      const part = info.parts.find((p) => p.id === (chosenPortId ?? ep.portId));
+      if (!part) return info.bounds;
+      return part.bounds;
+    };
+    const fromOwnerBounds = ownerPart(conn.from, fromRaw.portId);
+    const toOwnerBounds = ownerPart(conn.to, toRaw.portId);
+
     const obstacles: Rect[] = [];
     if (avoid) {
-      const region = boundsOf([from.pos, to.pos]);
-      for (const id of this.spatial.query({ x: region.x - 80, y: region.y - 80, w: region.w + 160, h: region.h + 160 })) {
-        const info = nodes.get(id);
-        if (!info) continue;
-        obstacles.push(info.bounds);
+      /*
+       * What the router is allowed to know about.
+       *
+       * A band around the straight line between the ports is not enough: the moment a
+       * route has to detour it leaves that band, and anything it meets out there is
+       * invisible to it — so it threads a gap it can see and drives straight through a box
+       * it cannot. An obstacle you have to get around therefore brings its own
+       * neighbourhood with it: the region grows to cover each rect it finds, and is asked
+       * again, until nothing new turns up. That converges on exactly the space the route
+       * might use, without a magic radius that is too small on one sheet and too slow on
+       * the next.
+       */
+      const seen = new Set<string>();
+      let region = inflate(boundsOf([from0.pos, to0.pos]), ROUTE_QUERY_MARGIN);
+      for (;;) {
+        let widened = false;
+        for (const id of this.spatial.query(region)) {
+          if (seen.has(id)) continue;
+          const info = nodes.get(id);
+          if (!info) continue;
+          seen.add(id);
+          // What the node actually occupies, which is its strokes and not the empty space
+          // between them: a component goes in piece by piece so a route can use its gaps.
+          // Declaring a hit area is how an author says otherwise — that the component is
+          // one solid thing whatever it happens to be drawn from.
+          if (info.hitAreas.length > 0) obstacles.push(info.bounds);
+          else for (const part of info.parts) obstacles.push(part.bounds);
+          const wider = rectUnion(region, inflate(info.bounds, ROUTE_QUERY_MARGIN));
+          if (wider.w > region.w + 1e-6 || wider.h > region.h + 1e-6) {
+            region = wider;
+            widened = true;
+          }
+        }
+        // The region only ever grows and the sheet is finite, so this settles on exactly
+        // the space the route might use.
+        if (!widened) break;
       }
     }
-    const fromOwnerBounds = avoid && conn.from.kind !== 'free' ? nodes.get(conn.from.nodeId)?.bounds : undefined;
-    const toOwnerBounds = avoid && conn.to.kind !== 'free' ? nodes.get(conn.to.nodeId)?.bounds : undefined;
+
+    /*
+     * Where on a sliding surface port the connector should land.
+     *
+     * An attach point may sit anywhere on the shape — a connector meets a circle on the
+     * diagonal as readily as on its sides — and which spot is best is a question about the
+     * route, not about the two shapes. Aiming at the other end answers it wrongly the
+     * moment anything is in the way: a port reached through a gap below is still aimed at
+     * the partner off to the left, so the route detours up and back to touch a spot it had
+     * already passed.
+     *
+     * So the spot is not guessed, it is searched for. Candidate points are taken all the
+     * way round each shape and handed to the router together: it seeds its search from
+     * every candidate at once and stops at the first one it reaches, which — because it
+     * measures distance to the *nearest* remaining candidate — is provably the cheapest
+     * pair. That is the standard super-source/super-target reduction, and it costs one
+     * search rather than one per pair.
+     *
+     * Only closed outlines take part. An open stroke is met at the point nearest whatever
+     * it is aimed at, so sampling it by direction would just walk its endpoints.
+     */
+    let from = from0;
+    let to = to0;
+    const fromSlides = !!fromRaw.outline && isClosedOutline(fromRaw.outline);
+    const toSlides = !!toRaw.outline && isClosedOutline(toRaw.outline);
+    const fromCenter = fromRaw.outline ? outlineCenter(fromRaw.outline) : from0.pos;
+    const toCenter = toRaw.outline ? outlineCenter(toRaw.outline) : to0.pos;
+    if (avoid && (fromSlides || toSlides) && obstacles.length > 0 && obstructedBetween(fromCenter, toCenter, obstacles)) {
+      /*
+       * The search has to be the route that will be drawn, or the cheapest attach found
+       * here is the cheapest of a different problem. The connector renders itself, so its
+       * own settings decide its geometry: a lead-in of 18 rather than the router's bare
+       * default of 16 moves every corner. Parameters a stored connection predates are taken
+       * from the component's declared defaults, which is what the script's own fallbacks
+       * resolve to.
+       */
+      const declared: Record<string, unknown> = {};
+      for (const def of entry?.def.params ?? []) declared[def.name] = def.default;
+      const p = { ...declared, ...conn.params };
+      const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
+      const routeOpts = {
+        obstacles,
+        fromOwnerBounds,
+        toOwnerBounds,
+        stub: num(p.stub),
+        clearance: num(p.clearance),
+        bendPenalty: num(p.bendPenalty),
+        router: p.router === 'simple' ? ('simple' as const) : ('auto' as const),
+        ...routingGridOf(doc.grid),
+      };
+
+      const fromAttach = fromSlides ? attachCandidates(fromRaw, settle) : [from0];
+      const toAttach = toSlides ? attachCandidates(toRaw, settle) : [to0];
+      const fromEnds = fromAttach.map((a) => ({ pos: a.pos, facing: a.facing }));
+      const toEnds = toAttach.map((a) => ({ pos: a.pos, facing: a.facing }));
+      const pick = <T>(list: T[], ends: RouteEndpoint[], chosen: RouteEndpoint): T =>
+        list[Math.max(0, ends.indexOf(chosen))];
+
+      const waypoints = conn.waypoints;
+      if (waypoints.length > 0) {
+        // With waypoints the route is drawn one leg at a time, so each end is chosen
+        // against the waypoint it actually meets rather than against the far port.
+        const head = routeOrthogonalBest(fromEnds, [{ pos: waypoints[0] }], {
+          ...routeOpts,
+          toOwnerBounds: undefined,
+        });
+        from = pick(fromAttach, fromEnds, head.from);
+        const tail = routeOrthogonalBest([{ pos: waypoints[waypoints.length - 1] }], toEnds, {
+          ...routeOpts,
+          fromOwnerBounds: undefined,
+        });
+        to = pick(toAttach, toEnds, tail.to);
+      } else {
+        const best = routeOrthogonalBest(fromEnds, toEnds, routeOpts);
+        from = pick(fromAttach, fromEnds, best.from);
+        to = pick(toAttach, toEnds, best.to);
+      }
+    }
 
     const ctx = Object.freeze({
       connection: Object.freeze({
@@ -977,6 +1318,84 @@ interface DynamicPort {
   direction?: PortDirection;
 }
 
+/**
+ * Ports on one node that share a name are one logical port. Members learn about each
+ * other here, and their connection lists are merged so "is this port connected" (and a
+ * script's `ctx.ports`) answers for the group rather than for one of its pins.
+ */
+function linkPortGroups(resolved: ResolvedNodeInfo): void {
+  const byName = new Map<string, ResolvedPortInfo[]>();
+  for (const port of resolved.ports) {
+    const list = byName.get(port.name);
+    if (list) list.push(port);
+    else byName.set(port.name, [port]);
+  }
+  for (const members of byName.values()) {
+    if (members.length < 2) {
+      delete members[0].group;
+      continue;
+    }
+    const ids = members.map((p) => p.id);
+    const connections: string[] = [];
+    for (const p of members) for (const c of p.connections) if (!connections.includes(c)) connections.push(c);
+    for (const p of members) {
+      p.group = ids;
+      p.connections = connections;
+      p.connected = connections.length > 0;
+    }
+  }
+}
+
+/**
+ * How awkward it is to leave `port` towards `aim`: the distance the connector has to
+ * cover, plus — when the port's normal points the other way — the detour needed to get
+ * round the node, which is what makes a far pin on the near side beat a near pin facing
+ * backwards.
+ */
+function groupMemberCost(target: ResolvedNodeInfo, port: ResolvedPortInfo, aim: Vec, grid?: AttachGrid): number {
+  const at = port.outline ? outlineAttach(port.outline, aim, grid).pos : port.pos;
+  const dx = aim.x - at.x;
+  const dy = aim.y - at.y;
+  const dist = Math.hypot(dx, dy);
+  const facing = port.facing;
+  if (dist < 1e-6 || (facing.x === 0 && facing.y === 0)) return dist;
+  const away = Math.max(0, -((dx / dist) * facing.x + (dy / dist) * facing.y));
+  return dist + away * (Math.abs(facing.x) * target.bounds.w + Math.abs(facing.y) * target.bounds.h);
+}
+
+/**
+ * Pick the member of a same-named port group that is easiest to reach from `aim`. The
+ * stored member wins ties, so a connection only ever hops when there is a real gain.
+ */
+export function pickGroupMember(
+  target: ResolvedNodeInfo,
+  stored: ResolvedPortInfo,
+  aim: Vec | undefined,
+  grid?: AttachGrid,
+): ResolvedPortInfo {
+  if (!stored.group || !aim) return stored;
+  let best = stored;
+  let bestCost = groupMemberCost(target, stored, aim, grid);
+  for (const id of stored.group) {
+    if (id === stored.id) continue;
+    const candidate = target.ports.find((p) => p.id === id);
+    if (!candidate) continue;
+    const cost = groupMemberCost(target, candidate, aim, grid);
+    if (cost < bestCost - 1e-6) {
+      best = candidate;
+      bestCost = cost;
+    }
+  }
+  return best;
+}
+
+/**
+ * Every port id that stands in for this one: its same-named group, or just itself.
+ * Two ids in the same group are the same logical port and must not be joined together.
+ */export function portGroupIds(node: ResolvedNodeInfo | undefined, portId: string): string[] {
+  return node?.ports.find((p) => p.id === portId)?.group ?? [portId];
+}
+
 function applyDynamicPorts(
   resolved: ResolvedNodeInfo,
   ports: DynamicPort[],
@@ -1015,7 +1434,7 @@ function collectFromScript(
   portConnections: Map<string, string[]>,
   nodeId: string,
 ): void {
-  for (const [elId, ann] of Object.entries(def?.annotations ?? {})) {
+  for (const [elId, ann] of resolveAnnotations(def, resolved.node.params)) {
     const element = findById(resolved.vnodes, elId);
     if (!element) continue;
     const point = elementPoint(element);
@@ -1085,7 +1504,7 @@ function extractRoutePoints(vnodes: VNode[], from: Vec, to: Vec): Vec[] {
 }
 
 function defaultConnectorVNodes(points: Vec[], conn: Connection): VNode[] {
-  const stroke = String(conn.params.stroke ?? '#3b4252');
+  const stroke = String(conn.params.stroke ?? DEFAULT_CONNECTOR_STROKE);
   const width = Number(conn.params.strokeWidth ?? 1.6);
   const radius = Number(conn.params.radius ?? 6);
   const head = conn.params.arrow === false ? null : arrowHead(points.at(-1)!, points.at(-2) ?? points[0], Number(conn.params.headSize ?? 9));

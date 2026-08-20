@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CheckIcon,
   CodeIcon,
@@ -6,27 +6,36 @@ import {
   CornersIcon,
   CursorArrowIcon,
   DotFilledIcon,
+  ExclamationTriangleIcon,
   FileIcon,
   FileTextIcon,
   GridIcon,
   HandIcon,
   ImageIcon,
+  MagnifyingGlassIcon,
   ResetIcon,
   Share1Icon,
   TargetIcon,
+  UpdateIcon,
   ZoomInIcon,
   ZoomOutIcon,
 } from '@radix-ui/react-icons';
 import { useProject } from './editor/useProject';
 import { useController } from './editor/EditorSurface';
 import { SheetEditor } from './sheet/SheetEditor';
-import { ComponentEditor } from './component/ComponentEditor';
+import { ComponentEditor, type ComponentSession } from './component/ComponentEditor';
 import { confirmAndDelete } from './component/storage';
 import type { ComponentEntry } from '@core/library/registry';
-import { downloadPng, downloadText, exportSvg, printPdf } from './editor/export';
+import { downloadPng, downloadText, exportBackground, exportSvg, printPdf } from './editor/export';
 import { ButtonGroup } from './ui/ButtonGroup';
 import { IconButton } from './ui/IconButton';
-import type { ToolId } from './editor/EditorController';
+import { RouteCurveIcon, RouteOrthogonalIcon, RouteStraightIcon } from './ui/icons';
+import type { RouteStyle } from '@core/geometry/routing';
+import { ThemeMenu } from './ui/ThemeMenu';
+import type { SaveStatus } from './editor/autosave';
+import type { EditorController, ToolId } from './editor/EditorController';
+import { nameProjectInUrl, routeTitle, useRoute } from './routes';
+import { showAlert } from './ui/Dialog';
 
 const TOOLS: { id: ToolId; label: string; hint: string; icon: JSX.Element }[] = [
   { id: 'select', label: 'Select', hint: 'V — select, move, resize', icon: <CursorArrowIcon /> },
@@ -34,39 +43,103 @@ const TOOLS: { id: ToolId; label: string; hint: string; icon: JSX.Element }[] = 
   { id: 'connect', label: 'Connect', hint: 'C — drag between ports', icon: <Share1Icon /> },
 ];
 
+/**
+ * The routers a connector can use. Picking one re-routes the selected connectors and
+ * becomes the style the next connector is drawn with, so the group reads as the current
+ * setting whether or not anything is selected — and as blank when the selection disagrees.
+ */
+const ROUTERS: { id: RouteStyle; label: string; hint: string; icon: JSX.Element }[] = [
+  { id: 'orthogonal', label: 'Orthogonal', hint: 'right angles, routed around obstacles', icon: <RouteOrthogonalIcon /> },
+  { id: 'straight', label: 'Straight', hint: 'a direct line between the ports', icon: <RouteStraightIcon /> },
+  { id: 'curve', label: 'Curved', hint: 'a smooth curve leaving each port along its normal', icon: <RouteCurveIcon /> },
+];
+
+/** How each auto-save state reads in the toolbar. The button's own name stays "Save". */
+const SAVE_STATES: Record<SaveStatus, { text: string; icon: JSX.Element; className: string }> = {
+  saved: { text: 'Saved', icon: <CheckIcon />, className: '' },
+  pending: { text: 'Unsaved', icon: <DotFilledIcon />, className: ' is-pending' },
+  saving: { text: 'Saving…', icon: <UpdateIcon />, className: ' is-saving' },
+  error: { text: 'Save failed', icon: <ExclamationTriangleIcon />, className: ' is-error' },
+};
+
 export function App(): JSX.Element {
   const project = useProject();
-  const [mode, setMode] = useState<'sheet' | 'component'>('sheet');
-  const [openRef, setOpenRef] = useState<string | null>(null);
+  const { route, navigate } = useRoute();
+  const mode = route.view;
   const controller = project.controller;
-  useController(controller);
+  /**
+   * The component editor builds a canvas of its own, so the toolbar has to be told which
+   * one is on screen. A component *is* a project — the same tools, history, view controls
+   * and export apply to it, and there was never a reason for it to go without them. The
+   * same goes for opening and saving: both editors do it from here, not from a sidebar.
+   */
+  const [session, setSession] = useState<ComponentSession | null>(null);
+  const active = mode === 'component' ? (session?.open ? session.controller : null) : controller;
+  useController(active ?? controller);
+
+  // Coming back to the component editor lands on the component you left, not a blank one.
+  const lastComponent = useRef<{ ref: string | null; file: string | null }>({ ref: null, file: null });
+  if (route.view === 'component') lastComponent.current = { ref: route.ref, file: route.file };
+  // The route as the callbacks below see it, without rebuilding them on every navigation.
+  const routeRef = useRef(route);
+  routeRef.current = route;
+
+  useEffect(() => {
+    document.title = routeTitle(route);
+  }, [route]);
+
+  // A URL that names the project describes the whole screen, so reloading or sharing it
+  // comes back to the same place.
+  useEffect(() => {
+    if (project.status === 'ready') nameProjectInUrl(project.root);
+  }, [project.status, project.root]);
 
   // Editing a component from the palette hands it to the component editor.
   const editComponent = (entry: ComponentEntry): void => {
-    setOpenRef(entry.ref);
-    setMode('component');
+    navigate({ view: 'component', ref: entry.ref, file: null });
   };
+
+  /** The component editor reporting what it has open, so the URL keeps up with it. */
+  const componentOpened = useCallback(
+    (ref: string | null, file: string | null): void => {
+      const current = routeRef.current;
+      if (current.view !== 'component') return;
+      // Opening another component is a navigation; changing file tab is a correction.
+      navigate({ view: 'component', ref, file }, { replace: current.ref === ref });
+    },
+    [navigate],
+  );
 
   const deleteComponentFromPalette = async (entry: ComponentEntry): Promise<void> => {
     try {
       const deleted = await confirmAndDelete(project.registry, controller.store.getDocument(), entry);
       if (deleted) await project.reloadLibraries();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : String(err));
+      await showAlert(err instanceof Error ? err.message : String(err), { title: 'Could not delete' });
     }
   };
 
-  // Ctrl+S saves the sheet regardless of focus.
+  // Whatever is on screen saves itself; Ctrl+S just skips the wait. In the component
+  // editor that means the component, not the sheet behind it.
+  const sessionRef = useRef<ComponentSession | null>(null);
+  sessionRef.current = session;
+  const saveActive = useCallback((): void => {
+    if (routeRef.current.view === 'component') {
+      sessionRef.current?.save();
+      return;
+    }
+    void project.save();
+  }, [project]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        void project.save();
+        saveActive();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [project]);
+  }, [saveActive]);
 
   if (project.status === 'loading') {
     return <div className="boot">Opening project…</div>;
@@ -81,12 +154,24 @@ export function App(): JSX.Element {
     );
   }
 
-  const doc = controller.store.getDocument();
+  // What the save button says, and what it acts on. In the component editor it is the
+  // component that is being saved — the sheet behind it is not what is on screen.
+  const editingComponent = mode === 'component' && session !== null;
+  const saveState = editingComponent
+    ? SAVE_STATES[session.established ? session.saveStatus : 'pending']
+    : SAVE_STATES[project.saveStatus];
+  // Export follows the canvas on screen: on a sheet that is the sheet, in the component
+  // editor it is the component being drawn.
+  const activeDoc = (active ?? controller).store.getDocument();
   const svgOf = (onlySelection: boolean): string =>
-    exportSvg(doc, controller.getGraph(), controller.registry, {
-      only: onlySelection && controller.selection.size > 0 ? new Set(controller.selection) : undefined,
-    });
-  const baseName = (doc.meta.title || 'sheet').replace(/[^a-z0-9-_]+/gi, '-').toLowerCase();
+    active
+      ? exportSvg(activeDoc, active.getGraph(), active.registry, {
+          only: onlySelection && active.selection.size > 0 ? new Set(active.selection) : undefined,
+        })
+      : '';
+  const baseName = (activeDoc.meta.title || (mode === 'component' ? 'component' : 'sheet'))
+    .replace(/[^a-z0-9-_]+/gi, '-')
+    .toLowerCase();
 
   return (
     <div className="app">
@@ -99,18 +184,31 @@ export function App(): JSX.Element {
             hint="Sheet editor"
             icon={<FileIcon />}
             active={mode === 'sheet'}
-            onClick={() => setMode('sheet')}
+            onClick={() => navigate({ view: 'sheet' })}
           />
           <IconButton
             label="Component editor"
             hint="Component editor"
             icon={<Component1Icon />}
             active={mode === 'component'}
-            onClick={() => setMode('component')}
+            onClick={() => navigate({ view: 'component', ...lastComponent.current })}
           />
         </ButtonGroup>
 
-        {mode === 'sheet' ? (
+        {mode === 'component' && session ? (
+          <ButtonGroup label="Component">
+            <IconButton
+              label="Open component"
+              hint="Browse the project's components, or start a new one"
+              icon={<MagnifyingGlassIcon />}
+              onClick={session.browse}
+            >
+              {!session.open ? 'Open…' : session.copy ? `Copy of ${session.ref}` : (session.ref ?? 'New component')}
+            </IconButton>
+          </ButtonGroup>
+        ) : null}
+
+        {active ? (
           <>
             <ButtonGroup label="Tools">
               {TOOLS.map((tool) => (
@@ -119,23 +217,36 @@ export function App(): JSX.Element {
                   label={tool.label}
                   hint={`${tool.label} — ${tool.hint}`}
                   icon={tool.icon}
-                  active={controller.tool === tool.id}
+                  active={active.tool === tool.id}
                   onClick={() => {
-                    controller.tool = tool.id;
-                    controller.placeRef = tool.id === 'place' ? controller.placeRef : null;
-                    controller.notify();
+                    active.tool = tool.id;
+                    active.placeRef = tool.id === 'place' ? active.placeRef : null;
+                    active.notify();
                   }}
                 />
               ))}
             </ButtonGroup>
 
+            <ButtonGroup label="Routing">
+              {ROUTERS.map((router) => (
+                <IconButton
+                  key={router.id}
+                  label={router.label}
+                  hint={`${router.label} connector — ${router.hint}`}
+                  icon={router.icon}
+                  active={active.activeConnectStyle() === router.id}
+                  onClick={() => active.setConnectStyle(router.id)}
+                />
+              ))}
+            </ButtonGroup>
+
             <ButtonGroup label="History">
-              <IconButton label="Undo" hint="Undo — Ctrl+Z" icon={<ResetIcon />} onClick={() => controller.store.undo()} />
+              <IconButton label="Undo" hint="Undo — Ctrl+Z" icon={<ResetIcon />} onClick={() => undo(active, false)} />
               <IconButton
                 label="Redo"
                 hint="Redo — Ctrl+Shift+Z"
                 icon={<ResetIcon className="flip-x" />}
-                onClick={() => controller.store.redo()}
+                onClick={() => undo(active, true)}
               />
             </ButtonGroup>
 
@@ -143,15 +254,15 @@ export function App(): JSX.Element {
               <IconButton
                 label="Zoom out"
                 icon={<ZoomOutIcon />}
-                onClick={() => controller.zoomAt(centre(), 1 / 1.2)}
+                onClick={() => active.zoomAt(centre(active), 1 / 1.2)}
               />
-              <span className="zoom">{Math.round(controller.viewport.zoom * 100)}%</span>
-              <IconButton label="Zoom in" icon={<ZoomInIcon />} onClick={() => controller.zoomAt(centre(), 1.2)} />
+              <span className="zoom">{Math.round(active.viewport.zoom * 100)}%</span>
+              <IconButton label="Zoom in" icon={<ZoomInIcon />} onClick={() => active.zoomAt(centre(active), 1.2)} />
               <IconButton
                 label="Fit"
-                hint="Fit the sheet in the viewport"
+                hint="Fit the drawing in the viewport — F"
                 icon={<CornersIcon />}
-                onClick={() => fitView(controller)}
+                onClick={() => active.fit()}
               />
             </ButtonGroup>
 
@@ -160,20 +271,20 @@ export function App(): JSX.Element {
                 label="Snap"
                 hint="Snap to grid and alignment guides"
                 icon={<GridIcon />}
-                active={controller.snapEnabled}
+                active={active.snapEnabled}
                 onClick={() => {
-                  controller.snapEnabled = !controller.snapEnabled;
-                  controller.notify();
+                  active.snapEnabled = !active.snapEnabled;
+                  active.notify();
                 }}
               />
               <IconButton
                 label="Ports"
                 hint="Show port markers"
                 icon={<TargetIcon />}
-                active={controller.showPorts}
+                active={active.showPorts}
                 onClick={() => {
-                  controller.showPorts = !controller.showPorts;
-                  controller.notify();
+                  active.showPorts = !active.showPorts;
+                  active.notify();
                 }}
               />
             </ButtonGroup>
@@ -182,18 +293,25 @@ export function App(): JSX.Element {
               <IconButton
                 label="Export SVG"
                 icon={<CodeIcon />}
-                onClick={() => downloadText(`${baseName}.svg`, svgOf(controller.selection.size > 0))}
+                onClick={() => downloadText(`${baseName}.svg`, svgOf(active.selection.size > 0))}
               />
               <IconButton
                 label="Export PNG"
                 icon={<ImageIcon />}
-                onClick={() => void downloadPng(`${baseName}.png`, svgOf(controller.selection.size > 0))}
+                onClick={() =>
+                  void downloadPng(
+                    `${baseName}.png`,
+                    svgOf(active.selection.size > 0),
+                    2,
+                    exportBackground(activeDoc),
+                  )
+                }
               />
               <IconButton
                 label="Export PDF"
                 hint="Print to PDF"
                 icon={<FileTextIcon />}
-                onClick={() => printPdf(svgOf(false), doc.meta.title || 'sheet')}
+                onClick={() => printPdf(svgOf(false), activeDoc.meta.title || baseName)}
               />
             </ButtonGroup>
           </>
@@ -205,15 +323,26 @@ export function App(): JSX.Element {
           <span className="path" title={project.root}>
             {project.root}
           </span>
-          <IconButton
-            label={project.dirty ? 'Save' : 'Saved'}
-            hint="Save the project — Ctrl+S"
-            icon={project.dirty ? <DotFilledIcon /> : <CheckIcon />}
-            className="primary"
-            onClick={() => void project.save()}
-          >
-            {project.dirty ? 'Save' : 'Saved'}
-          </IconButton>
+          <ThemeMenu />
+          {editingComponent && !session.open ? null : (
+            <IconButton
+              label="Save"
+              hint={
+                editingComponent
+                  ? session.established
+                    ? `Saves itself as you work — Ctrl+S saves ${session.ref} now`
+                    : `Not written yet — Ctrl+S saves it as ${session.target}`
+                  : project.saveError
+                    ? `Could not save: ${project.saveError} — click to try again`
+                    : 'Saves itself as you work — Ctrl+S saves now'
+              }
+              icon={saveState.icon}
+              className={`primary save${saveState.className}`}
+              onClick={saveActive}
+            >
+              {saveState.text}
+            </IconButton>
+          )}
         </div>
       </header>
 
@@ -224,19 +353,29 @@ export function App(): JSX.Element {
           onDeleteComponent={(entry) => void deleteComponentFromPalette(entry)}
         />
       ) : (
-        <ComponentEditor project={project} openRef={openRef} onOpened={() => setOpenRef(null)} />
+        <ComponentEditor
+          project={project}
+          openRef={route.view === 'component' ? route.ref : null}
+          openFile={route.view === 'component' ? route.file : null}
+          onOpened={componentOpened}
+          onSession={setSession}
+        />
       )}
     </div>
   );
 }
 
-function centre(): { x: number; y: number } {
-  return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+function centre(controller: EditorController): { x: number; y: number } {
+  const { w, h } = controller.viewSize;
+  // Before the surface has measured itself the window is the best guess going.
+  if (w <= 0 || h <= 0) return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+  return { x: w / 2, y: h / 2 };
 }
 
-function fitView(controller: { fit: (size: { w: number; h: number }) => void }): void {
-  const el = document.querySelector('.canvas-area');
-  const w = el?.clientWidth ?? window.innerWidth;
-  const h = el?.clientHeight ?? window.innerHeight;
-  controller.fit({ w, h });
+/** Step the document's history and let the graph know it has to be rebuilt. */
+function undo(controller: EditorController, redo: boolean): void {
+  if (redo) controller.store.redo();
+  else controller.store.undo();
+  controller.invalidateGraph();
+  controller.notify();
 }

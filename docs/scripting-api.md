@@ -48,7 +48,7 @@ security boundary — an infinite loop still freezes the tab.
 | `ctx.node` | `{ id, ref, x, y, rot, scaleX, scaleY }` — the resolved world transform. `scaleX`/`scaleY` are informational only; geometry returned by `render()` is never rescaled |
 | `ctx.size` | `{ w, h }` of the instance — draw at this size directly |
 | `ctx.params` | frozen copy of the instance parameters |
-| `ctx.ports` | `[{ id, name, direction, connected, pos, localPos, facing }]` |
+| `ctx.ports` | `[{ id, name, direction, connected, pos, localPos, facing, group? }]` — `group` lists the ids of every same-named port on the node when there is more than one; such ports are one logical port and share `connected` and their connection list |
 | `ctx.graph` | graph queries, see below |
 | `ctx.env` | `{ now, tick, unit, grid }` |
 | `ctx.log(...)` | writes to the inspector's script output |
@@ -69,7 +69,7 @@ security boundary — an infinite loop still freezes the tab.
 | `node(id)` | a snapshot `{ id, ref, x, y, w, h, params, ports, bounds }` or `null` |
 | `nodes()` | every node snapshot — **always recomputes**, prefer a narrower query |
 | `nodesInRect(rect)` | nodes overlapping a world-space rect |
-| `connectionsOf(nodeId, portId?)` | `{ id, from, to, params }` for the connections touching a node/port |
+| `connectionsOf(nodeId, portId?)` | `{ id, from, to, params }` for the connections touching a node/port — a `portId` in a same-named group answers for the whole group |
 | `neighbors(nodeId)` | node snapshots on the other end of connected edges |
 | `meta()` | the document metadata (`title`, `author`, `revision`, `date`, …) |
 
@@ -118,7 +118,8 @@ Attributes with a `null`/`undefined` value are dropped. Output is sanitised: unk
 `opts`: `{ fromFacing, toFacing, waypoints, obstacles, stub, clearance, router, bendPenalty, grid, gridOrigin }`.
 
 `route.orthogonal` leaves each port along its normal, then searches for the cheapest
-collision-free staircase, where cost is length plus `bendPenalty` (default 25) per corner —
+collision-free staircase, where cost is length plus `bendPenalty` per corner (0 on the arrow,
+25 when the option is omitted) —
 so it goes around whole arrangements of nodes rather than picking the least-bad of a few
 elbow shapes. It never retraces an exit stub. `router: 'simple'` selects the old
 candidate-shape search, which is what the engine also falls back to when the lattice is too
@@ -147,6 +148,11 @@ with `data-swcad-port` / `data-swcad-label`) or from `ports()`.
 ### `style(ctx) -> { slots: { <slotName>: { <attr>: value } } }`
 
 Merged onto the elements annotated as `fill_slot`. Cheap; prefer it over `render` for state colour.
+
+A returned colour may be a literal (`'#2e3440'`, fixed forever) or a theme token
+(`'var(--sw-success)'`), which follows whichever palette the drawing is viewed in and is baked into
+its resolved value on export. See *Colours: fixed or borrowed* in
+[authoring-components.md](authoring-components.md) for the full token list.
 
 ### `ports(ctx) -> [{ id, name, direction, x, y, facing }]`
 

@@ -1,0 +1,17 @@
+{
+  "id": "text",
+  "name": "Text",
+  "version": "2.0.0",
+  "category": "shape",
+  "description": "A block of Markdown. Double-click to edit: **bold**, *italic*, `code`, # headings and - lists all work.",
+  "resizable": false,
+  "params": [
+    {
+      "name": "text",
+      "type": "string",
+      "label": "Text",
+      "default": "Text",
+      "hidden": true
+    }
+  ]
+}

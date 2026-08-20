@@ -13,9 +13,11 @@ import { rectFromPoints } from '@core/geometry/index';
 import { outlineAttach, outlinePath } from '@core/geometry/outline';
 import type { Change } from '@core/model/store';
 import { bindTarget } from '@core/model/bind';
+import { resolveAnnotations } from '@core/model/annotations';
 import type { ResolvedNodeInfo } from '@core/model/graph';
+import { pickGroupMember, portGroupIds } from '@core/model/graph';
 import type { Node } from '@core/model/types';
-import type { EditorController, DragState } from './EditorController';
+import type { EditorController, DragState, ToolId } from './EditorController';
 import { GridLayer, HighlightLayer } from './layers/CanvasLayers';
 import { connectionMarkup, nodeMarkup, nodeTransform } from './render';
 
@@ -25,6 +27,14 @@ export interface EditorSurfaceProps {
   underlay?: ReactNode;
   /** World-space content drawn above the graph. */
   overlay?: ReactNode;
+  /**
+   * Frame the drawing whenever this changes. The surface is the only thing that knows how
+   * big it is, so "centre what was just opened" has to be asked for from out here rather
+   * than done by the caller the moment it swaps the document.
+   */
+  fitKey?: unknown;
+  /** Ceiling for the zoom an automatic fit may choose. */
+  fitMaxZoom?: number;
 }
 
 /**
@@ -53,32 +63,55 @@ export function useController(controller: EditorController): number {
   return useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
 }
 
+/** Unmodified keys that pick a tool, as the toolbar's tooltips promise. */
+const TOOL_KEYS: Record<string, ToolId> = { v: 'select', h: 'pan', c: 'connect' };
+
 /** A zoom session ends once the user pauses this long between wheel notches. */
-const ZOOM_SESSION_IDLE_MS = 600;
-/** …or moves the pointer further than this, which re-picks the zoom target. */
+const ZOOM_SESSION_IDLE_MS = 600;/** …or moves the pointer further than this, which re-picks the zoom target. */
 const ZOOM_SESSION_SLOP_PX = 3;
+
+/** How far off a shape a click may land and still count as being on it, in screen pixels. */
+const HIT_TOLERANCE = 6;
+/** Unit offsets probed at that radius when the pointer itself is over bare canvas. */
+const HIT_RING: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+  [0, -1],
+  [0.707, 0.707],
+  [-0.707, 0.707],
+  [0.707, -0.707],
+  [-0.707, -0.707],
+];
 
 const zoomFactor = (dy: number, perPixel: number): number =>
   Math.min(2, Math.max(0.5, Math.exp(-dy * perPixel)));
 
 /**
  * Both ends of the rubber-band line while connecting. Surface ports have no
- * fixed spot, so each end slides along its edge to face the other.
+ * fixed spot, so each end slides along its edge to face the other, and a port
+ * that shares its name with others hops to whichever of them reads best — the
+ * same choice the engine makes once the connection is committed.
  */
 function connectPreview(controller: EditorController, drag: DragState): { a: Vec; b: Vec } {
   const graph = controller.getGraph();
   const from = drag.from;
-  const source =
-    from?.kind === 'port' ? graph.nodes.get(from.nodeId)?.ports.find((p) => p.id === from.portId) : undefined;
-  const target = drag.hoverPort;
-  let a = drag.fromPos ?? drag.start;
-  if (source?.outline) a = outlineAttach(source.outline, target ? target.pos : drag.current).pos;
+  const sourceNode = from?.kind === 'port' ? graph.nodes.get(from.nodeId) : undefined;
+  const stored = from?.kind === 'port' ? sourceNode?.ports.find((p) => p.id === from.portId) : undefined;
+  const hovered = drag.hoverPort;
+  const grid = controller.attachGrid();
+  const aim = hovered ? hovered.pos : drag.current;
+  const source = sourceNode && stored ? pickGroupMember(sourceNode, stored, aim, grid) : stored;
+  let a = source && source.id !== stored?.id ? source.pos : (drag.fromPos ?? drag.start);
+  if (source?.outline) a = outlineAttach(source.outline, aim, grid).pos;
+  const targetNode = hovered ? graph.nodes.get(hovered.nodeId) : undefined;
+  const target = targetNode && hovered ? pickGroupMember(targetNode, hovered, a, grid) : hovered;
   let b = target ? controller.portAttach(target, a) : drag.current;
-  if (source?.outline) a = outlineAttach(source.outline, b).pos;
+  if (source?.outline) a = outlineAttach(source.outline, b, grid).pos;
   return { a, b };
 }
 
-export function EditorSurface({ controller, underlay, overlay }: EditorSurfaceProps): JSX.Element {
+export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoom }: EditorSurfaceProps): JSX.Element {
   useController(controller);
   const hostRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
@@ -87,15 +120,54 @@ export function EditorSurface({ controller, underlay, overlay }: EditorSurfacePr
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const observer = new ResizeObserver(() => {
+    const measure = (): void => {
       const box = host.getBoundingClientRect();
-      setSize({ w: box.width, h: box.height });
-    });
+      const next = { w: box.width, h: box.height };
+      const prev = controller.viewSize;
+      controller.viewSize = next;
+      // A pane that grows or shrinks keeps whatever was in the middle of it in the middle
+      // of it, rather than pinning the drawing to the top-left and letting it drift.
+      if (prev.w > 0 && prev.h > 0 && (prev.w !== next.w || prev.h !== next.h)) {
+        controller.panBy((next.w - prev.w) / 2, (next.h - prev.h) / 2);
+      }
+      setSize(next);
+    };
+    const observer = new ResizeObserver(measure);
     observer.observe(host);
-    const box = host.getBoundingClientRect();
-    setSize({ w: box.width, h: box.height });
+    measure();
     return () => observer.disconnect();
-  }, []);
+  }, [controller]);
+
+  // The zoom ceiling belongs to the canvas, not to one call, so that the toolbar's Fit
+  // frames a component exactly the way opening it did. Set before the fit effect below.
+  useLayoutEffect(() => {
+    if (fitMaxZoom !== undefined) controller.fitMaxZoom = fitMaxZoom;
+  }, [controller, fitMaxZoom]);
+
+  // Framing what has just been opened has to wait for a measured surface and a graph the
+  // engine has already laid out, so it happens a frame late rather than on the spot. The
+  // live `viewSize` is read at that point; `size` is here only to retry once it lands.
+  //
+  // The frame is never cancelled on teardown. `framed` is a ref, so it survives both the
+  // re-run that the first measurement causes and StrictMode's remount — cancelling would
+  // drop the only fit that was ever going to be scheduled. A frame that outlives the
+  // surface just re-centres a controller nothing is looking at.
+  const framed = useRef<unknown>(undefined);
+  const fitFrame = useRef(0);
+  useEffect(() => {
+    if (fitKey === undefined || fitKey === framed.current) return;
+    if (controller.viewSize.w <= 0 || controller.viewSize.h <= 0) return;
+    framed.current = fitKey;
+    cancelAnimationFrame(fitFrame.current);
+    fitFrame.current = requestAnimationFrame(() => {
+      // Measured again here, not reused from above: opening a component can bring the
+      // inspector pane in with it, and that narrows the surface after the effect ran.
+      const box = hostRef.current?.getBoundingClientRect();
+      const now = box ? { w: box.width, h: box.height } : controller.viewSize;
+      controller.viewSize = now;
+      controller.fit(now);
+    });
+  }, [fitKey, size, controller]);
 
   const doc = controller.store.getDocument();
   const graph = controller.getGraph();
@@ -108,6 +180,46 @@ export function EditorSurface({ controller, underlay, overlay }: EditorSurfacePr
     },
     [],
   );
+
+  // ------------------------------------------------------------ hit testing
+
+  /**
+   * What is actually drawn under the pointer, or null for bare canvas.
+   *
+   * Selection follows the drawing, never the box around it: the browser has already hit-tested
+   * the SVG we painted — through every rotation, scale, fill rule and stacking decision — so we
+   * ask it rather than re-deriving the answer from bounds. That makes the empty middle of an
+   * open shape click *through* to whatever sits behind it, and it makes a click on a shape mean
+   * that shape, which is what the inspector then shows.
+   *
+   * The ring of extra probes is the tolerance a bounding box used to provide by accident:
+   * without it a hairline or a thin glyph would need pixel-perfect aim. The centre is tried
+   * first and alone in the common case, so a hit costs one call.
+   */
+  const pickAt = useCallback((clientX: number, clientY: number): { kind: 'node' | 'connection'; id: string } | null => {
+    const root = hostRef.current;
+    if (!root) return null;
+    const probe = (x: number, y: number): { kind: 'node' | 'connection'; id: string } | null => {
+      // Topmost first, and every ancestor of each hit, so the first match is the frontmost
+      // node or connection. Overlays without a data id are stepped over rather than blocking.
+      for (const el of document.elementsFromPoint(x, y)) {
+        const owner = el.closest?.('[data-node],[data-connection]');
+        if (!owner || !root.contains(owner)) continue;
+        const nodeId = owner.getAttribute('data-node');
+        if (nodeId) return { kind: 'node', id: nodeId };
+        const connectionId = owner.getAttribute('data-connection');
+        if (connectionId) return { kind: 'connection', id: connectionId };
+      }
+      return null;
+    };
+    const direct = probe(clientX, clientY);
+    if (direct) return direct;
+    for (const [dx, dy] of HIT_RING) {
+      const near = probe(clientX + dx * HIT_TOLERANCE, clientY + dy * HIT_TOLERANCE);
+      if (near) return near;
+    }
+    return null;
+  }, []);
 
   // ------------------------------------------------------------ interaction
 
@@ -137,13 +249,18 @@ export function EditorSurface({ controller, underlay, overlay }: EditorSurfacePr
     }
     if (event.button !== 0) return;
 
-    if (controller.tool === 'place' && controller.placeRef) {
+    if (controller.tool === 'place' && (controller.placeRef || controller.onPlace)) {
       const snapped = controller.snap(world);
-      const node = controller.createNode(controller.placeRef, snapped.pos);
-      if (node) controller.select([node.id]);
+      if (controller.placeRef) {
+        const node = controller.createNode(controller.placeRef, snapped.pos);
+        if (node) controller.select([node.id]);
+      } else {
+        controller.onPlace?.(snapped.pos, event.shiftKey);
+      }
       if (!event.shiftKey) {
         controller.tool = 'select';
         controller.placeRef = null;
+        controller.onPlace = null;
       }
       controller.guides = [];
       controller.notify();
@@ -181,7 +298,7 @@ export function EditorSurface({ controller, underlay, overlay }: EditorSurfacePr
       return;
     }
 
-    const hit = controller.hitTest(world);
+    const hit = pickAt(event.clientX, event.clientY);
     if (hit) {
       if (event.shiftKey) controller.toggleSelect(hit.id);
       else if (!controller.selection.has(hit.id)) controller.select([hit.id]);
@@ -223,7 +340,7 @@ export function EditorSurface({ controller, underlay, overlay }: EditorSurfacePr
 
     if (!drag) {
       const port = controller.portAt(world, controller.tool === 'connect');
-      const hit = port ? null : controller.hitTest(world);
+      const hit = port ? null : pickAt(event.clientX, event.clientY);
       const nextHover = hit?.id ?? null;
       if (nextHover !== controller.hoverId || port?.id !== controller.hoverPort?.id) {
         controller.hoverId = nextHover;
@@ -355,7 +472,14 @@ export function EditorSurface({ controller, underlay, overlay }: EditorSurfacePr
 
     if (drag.kind === 'connect' && drag.from) {
       const target = controller.portAt(drag.current);
-      if (target && !(drag.from.kind === 'port' && target.nodeId === drag.from.nodeId && target.id === drag.from.portId)) {
+      // Members of one same-named group are the same logical port, so dropping on a
+      // sibling of the port we started from is still a self-connection.
+      const sameLogicalPort =
+        !!target &&
+        drag.from.kind === 'port' &&
+        target.nodeId === drag.from.nodeId &&
+        portGroupIds(graph.nodes.get(target.nodeId), drag.from.portId).includes(target.id);
+      if (target && !sameLogicalPort) {
         controller.connect(drag.from, { kind: 'port', nodeId: target.nodeId, portId: target.id });
       } else if (drag.moved) {
         const snapped = controller.snap(drag.current);
@@ -368,11 +492,11 @@ export function EditorSurface({ controller, underlay, overlay }: EditorSurfacePr
 
   const onDoubleClick = (event: React.MouseEvent<HTMLDivElement>): void => {
     const world = controller.toWorld(pointerPos(event));
-    const hit = controller.hitTest(world);
+    const hit = pickAt(event.clientX, event.clientY);
     if (!hit || hit.kind !== 'node') return;
     const info = graph.nodes.get(hit.id);
     if (!info) return;
-    const editable = Object.entries(info.def?.annotations ?? {})
+    const editable = resolveAnnotations(info.def, info.node.params)
       .filter(([, ann]) => ann.kind === 'label' && ann.editable)
       .map(([elId]) => elId);
     if (editable.length === 0) return;
@@ -504,17 +628,42 @@ export function EditorSurface({ controller, underlay, overlay }: EditorSurfacePr
       if (event.key === 'Escape') {
         controller.tool = 'select';
         controller.placeRef = null;
+        controller.onPlace = null;
         controller.drag = null;
         controller.editingLabel = null;
         controller.clearSelection();
         controller.notify();
         return;
       }
+      // Zoom to fit. `F` sits with the other unmodified letter shortcuts; Shift+1 is the
+      // one most users arrive with, matched on `code` so a non-US layout still reaches it.
+      if (
+        (event.key.toLowerCase() === 'f' && !mod && !event.altKey && !event.shiftKey) ||
+        (event.code === 'Digit1' && event.shiftKey && !mod && !event.altKey)
+      ) {
+        event.preventDefault();
+        controller.fit();
+        return;
+      }
+      // The tool shortcuts the toolbar advertises. Unmodified letters only, so Ctrl+C and
+      // friends above have already had their turn.
+      const tool = TOOL_KEYS[event.key.toLowerCase()];
+      if (tool && !event.altKey && !event.shiftKey) {
+        event.preventDefault();
+        controller.tool = tool;
+        controller.placeRef = null;
+        controller.onPlace = null;
+        controller.notify();
+        return;
+      }
       const step = event.shiftKey ? doc.grid.size : doc.grid.size / doc.grid.subdivisions;
-      if (event.key === 'ArrowLeft') controller.nudge(-step, 0);
-      else if (event.key === 'ArrowRight') controller.nudge(step, 0);
-      else if (event.key === 'ArrowUp') controller.nudge(0, -step);
-      else if (event.key === 'ArrowDown') controller.nudge(0, step);
+      const nudge = (dx: number, dy: number): void => {
+        controller.nudge(dx, dy);
+      };
+      if (event.key === 'ArrowLeft') nudge(-step, 0);
+      else if (event.key === 'ArrowRight') nudge(step, 0);
+      else if (event.key === 'ArrowUp') nudge(0, -step);
+      else if (event.key === 'ArrowDown') nudge(0, step);
     };
     const onKeyUp = (event: KeyboardEvent): void => {
       if (event.code === 'Space') spaceRef.current = false;
@@ -531,6 +680,7 @@ export function EditorSurface({ controller, underlay, overlay }: EditorSurfacePr
 
   const drag = controller.drag;
   const highlightActive = Boolean(drag && (drag.kind === 'move' || drag.kind === 'connect' || drag.kind === 'resize')) || controller.tool === 'place';
+
   const page = doc.page;
   const pageBox = useMemo(
     () => (page ? { x: 0, y: 0, w: page.width * page.scale, h: page.height * page.scale } : null),
@@ -568,6 +718,7 @@ export function EditorSurface({ controller, underlay, overlay }: EditorSurfacePr
             return (
               <g
                 key={id}
+                data-connection={id}
                 className={`connection${controller.selection.has(id) ? ' is-selected' : ''}`}
                 dangerouslySetInnerHTML={{ __html: connectionMarkup(info) }}
               />
@@ -577,18 +728,20 @@ export function EditorSurface({ controller, underlay, overlay }: EditorSurfacePr
           {graph.order.map((id) => {
             const info = graph.nodes.get(id)!;
             if (info.node.hidden) return null;
+            const editingHere = controller.editingLabel?.nodeId === id ? controller.editingLabel.elementId : null;
             return (
               <g
                 key={id}
+                data-node={id}
                 className={`node${controller.selection.has(id) ? ' is-selected' : ''}${controller.hoverId === id ? ' is-hover' : ''}`}
                 transform={nodeTransform(info)}
-                dangerouslySetInnerHTML={{ __html: nodeMarkup(info) }}
+                dangerouslySetInnerHTML={{ __html: nodeMarkup(info, editingHere) }}
               />
             );
           })}
 
           {/* selection outlines */}
-          {[...controller.selection].map((id) => {
+          {(controller.showNodeOutline ? [...controller.selection] : []).map((id) => {
             const info = graph.nodes.get(id) ?? graph.connections.get(id);
             if (!info) return null;
             const b = info.bounds;
@@ -653,7 +806,7 @@ export function EditorSurface({ controller, underlay, overlay }: EditorSurfacePr
                   // while the pointer is on it; otherwise every node would read as highlighted.
                   if (!reveal && !connecting && !hovered) return [];
                   const aim = active && drag?.kind === 'connect' && drag.fromPos ? drag.fromPos : controller.cursorWorld;
-                  const touch = emphasis && aim ? outlineAttach(port.outline, aim).pos : null;
+                  const touch = emphasis && aim ? outlineAttach(port.outline, aim, controller.attachGrid()).pos : null;
                   return [
                     <g key={`port-${info.id}-${port.id}`}>
                       <path
@@ -781,7 +934,12 @@ function LabelEditor({
   const editing = controller.editingLabel;
   const graph = controller.getGraph();
   const info = editing ? graph.nodes.get(editing.nodeId) : null;
-  const annotation = editing && info?.def?.annotations[editing.elementId];
+  const annotation =
+    editing && info
+      ? (resolveAnnotations(info.def, info.node.params).find(
+          ([elId, ann]) => elId === editing.elementId && ann.kind === 'label',
+        )?.[1] ?? null)
+      : null;
   const [value, setValue] = useState('');
 
   useEffect(() => {
@@ -816,18 +974,56 @@ function LabelEditor({
       : style?.anchor === 'end' || annotation.align === 'end'
         ? 'right'
         : 'left';
+  const fontFamily = override?.['font-family'] ?? style?.fontFamily;
+  const fontWeight = override?.['font-weight'] ?? style?.fontWeight;
+  const fontStyle = override?.['font-style'] ?? style?.fontStyle;
+
+  // Markdown is a block, not a word: it is typed as source over the box the rendered
+  // result occupies, and Enter is a line break rather than "done".
+  if (annotation.markdown) {
+    const lines = value.split('\n');
+    const cols = Math.max(...lines.map((line) => line.length), 12);
+    const width = Math.max(labelBox ? labelBox.w * zoom : 0, cols * fontSize * 0.6) + fontSize;
+    const height = Math.max(labelBox ? labelBox.h * zoom : 0, lines.length * fontSize * 1.35) + fontSize * 0.5;
+    const corner = labelBox
+      ? controller.toScreen({ x: labelBox.x, y: labelBox.y })
+      : controller.toScreen({ x: info.bounds.x, y: info.bounds.y });
+    return (
+      <textarea
+        className="label-editor is-markdown"
+        autoFocus
+        value={value}
+        spellCheck={false}
+        style={{
+          left: Math.min(Math.max(0, corner.x - fontSize * 0.35), Math.max(0, surfaceSize.w - width)),
+          top: Math.min(Math.max(0, corner.y - fontSize * 0.3), Math.max(0, surfaceSize.h - height)),
+          width,
+          height,
+          fontSize,
+          lineHeight: `${fontSize * 1.35}px`,
+        }}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) commit();
+          if (e.key === 'Escape') {
+            controller.editingLabel = null;
+            controller.notify();
+          }
+        }}
+      />
+    );
+  }
 
   // Match the drawn text: same font, same size, same baseline — then grow as the user types.
   const typedWidth = Math.max(value.length + 1, 4) * fontSize * 0.58;
   const width = Math.max(labelBox ? labelBox.w * zoom : 0, typedWidth);
-  const fontFamily = override?.['font-family'] ?? style?.fontFamily;
-  const fontWeight = override?.['font-weight'] ?? style?.fontWeight;
-  const fontStyle = override?.['font-style'] ?? style?.fontStyle;
   const metrics = fontMetrics(
     `${fontStyle ?? 'normal'} ${fontWeight ?? 400} ${fontSize}px ${fontFamily ?? 'sans-serif'}`,
     fontSize,
   );
-  // Tall enough to hide the label underneath, which occupies the whole font box.
+  // The full font box, so the caret and any descenders have room even on a short label.
   const height = Math.max(labelBox ? labelBox.h * zoom : 0, metrics.ascent + metrics.descent);
   const anchor = labelBox
     ? controller.toScreen({

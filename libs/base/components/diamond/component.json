@@ -7,7 +7,7 @@
   "resizable": true,
   "params": [
     { "name": "title", "type": "string", "label": "Title", "default": "Decision?" },
-    { "name": "fill", "type": "color", "label": "Fill", "default": "#ffffff" },
-    { "name": "stroke", "type": "color", "label": "Stroke", "default": "#2e3440" }
+    { "name": "fill", "type": "color", "label": "Fill", "default": "var(--sw-surface)" },
+    { "name": "stroke", "type": "color", "label": "Stroke", "default": "var(--sw-ink)" }
   ]
 }

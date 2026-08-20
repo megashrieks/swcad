@@ -12,6 +12,27 @@ export type Outline =
 
 const EPS = 1e-9;
 
+/**
+ * The lattice a sliding attach point is pulled onto. `step` is the routing step, not the
+ * drawn cell size, so an attach point lines up with the lanes the router works on.
+ */
+export interface AttachGrid {
+  step: number;
+  origin?: Vec;
+}
+
+/** How far, in grid steps, an attach point may be nudged to reach a grid line. */
+const SNAP_REACH = 0.75;
+
+/**
+ * True when the outline encloses its own centre, so a ray leaving that centre always
+ * finds an edge — and the point it finds can be anywhere on the shape, not just its
+ * extremes. An open stroke is met where it runs instead.
+ */
+export function isClosedOutline(o: Outline): boolean {
+  return o.kind === 'ellipse' || o.closed;
+}
+
 export function outlineCenter(o: Outline): Vec {
   if (o.kind === 'ellipse') return { ...o.c };
   const b = boundsOf(o.points);
@@ -39,8 +60,18 @@ function segments(o: { points: Vec[]; closed: boolean }): [Vec, Vec][] {
  * encloses its centre, the crossing of the ray leaving that centre; for an open stroke,
  * the point on the stroke nearest the incoming end. Falls back to the centre only when
  * the direction is degenerate.
+ *
+ * With a `grid`, a point that landed on a straight run of the outline slides along that
+ * run onto the nearest grid line. A whole line annotated as a port is otherwise met at
+ * whatever spot the geometry works out to, and a connector leaving it — perpendicular to
+ * the line, so along the free axis' partner — would start off-lattice and stay there.
  */
-export function outlineAttach(o: Outline, toward: Vec): { pos: Vec; facing: Vec } {
+export function outlineAttach(o: Outline, toward: Vec, grid?: AttachGrid): { pos: Vec; facing: Vec } {
+  const hit = attachPoint(o, toward);
+  return grid ? snapAlong(o, hit, grid) : hit;
+}
+
+function attachPoint(o: Outline, toward: Vec): { pos: Vec; facing: Vec } {
   const c = outlineCenter(o);
   const dir = { x: toward.x - c.x, y: toward.y - c.y };
   if (Math.hypot(dir.x, dir.y) < EPS) return { pos: c, facing: { x: 0, y: 0 } };
@@ -83,11 +114,96 @@ export function outlineAttach(o: Outline, toward: Vec): { pos: Vec; facing: Vec 
 }
 
 /**
- * The point of an open stroke nearest `target`, with the edge normal facing the side the
- * connector arrives from. At a free end there is no edge to be perpendicular to, so the
- * connector is faced back along its own approach.
+ * Slide an attach point along the straight run it landed on until it sits on a grid line.
+ *
+ * Only the run carrying the point is considered, so the connector still meets the edge it
+ * was aimed at, and the move is capped at `SNAP_REACH` steps: the nearest lattice line is
+ * always within half a step along an axis-aligned run, and a diagonal one reaches a little
+ * further. A curve has no straight run to slide along and is left alone — an ellipse
+ * outright, and a flattened arc because its segments are far shorter than a grid step, so
+ * no lattice line falls inside the one it hit.
+ */
+function snapAlong(o: Outline, hit: { pos: Vec; facing: Vec }, grid: AttachGrid): { pos: Vec; facing: Vec } {
+  const step = grid.step;
+  if (!(step > 0) || o.kind === 'ellipse') return hit;
+  const run = runAt(o, hit.pos);
+  if (!run) return hit;
+  const [a, b] = run;
+  const ex = b.x - a.x;
+  const ey = b.y - a.y;
+  if (Math.hypot(ex, ey) < EPS) return hit;
+
+  const origin = grid.origin ?? { x: 0, y: 0 };
+  const limit = step * SNAP_REACH;
+  let best: Vec | null = null;
+  let bestDist = Infinity;
+  const consider = (u: number): void => {
+    if (!Number.isFinite(u) || u < 0 || u > 1) return;
+    const p = { x: a.x + ex * u, y: a.y + ey * u };
+    const d = Math.hypot(p.x - hit.pos.x, p.y - hit.pos.y);
+    if (d > limit || d >= bestDist) return;
+    best = p;
+    bestDist = d;
+  };
+  // A run that spans x can reach a vertical grid line, one that spans y a horizontal one.
+  // An axis-aligned run offers only its own free axis; a diagonal offers both, nearest wins.
+  if (Math.abs(ex) > EPS) {
+    const k = (hit.pos.x - origin.x) / step;
+    for (const g of [Math.floor(k), Math.ceil(k)]) consider((origin.x + g * step - a.x) / ex);
+  }
+  if (Math.abs(ey) > EPS) {
+    const k = (hit.pos.y - origin.y) / step;
+    for (const g of [Math.floor(k), Math.ceil(k)]) consider((origin.y + g * step - a.y) / ey);
+  }
+  return best ? { pos: best, facing: hit.facing } : hit;
+}
+
+/** The straight run of the outline that `p` sits on. */
+function runAt(o: { points: Vec[]; closed: boolean }, p: Vec): [Vec, Vec] | null {
+  let best: [Vec, Vec] | null = null;
+  let bestDist = Infinity;
+  for (const seg of segments(o)) {
+    const d = distToSegment(p, seg[0], seg[1]);
+    if (d >= bestDist) continue;
+    bestDist = d;
+    best = seg;
+  }
+  return best;
+}
+
+/** Mean of the stroke's own points - a stand-in for which side of it is "inside". */function centroidOf(points: Vec[]): Vec {
+  if (points.length === 0) return { x: 0, y: 0 };
+  let x = 0;
+  let y = 0;
+  for (const p of points) {
+    x += p.x;
+    y += p.y;
+  }
+  return { x: x / points.length, y: y / points.length };
+}
+
+/**
+ * How clearly a normal has to lean away from the stroke's own body before it is trusted
+ * over the side the connector arrives from. Both vectors are unit length, so this is the
+ * cosine of the angle between them.
+ */
+const BULGE_EPS = 0.25;
+
+/**
+ * The point of an open stroke nearest `target`.
+ *
+ * A curved stroke - an arc cap, say - has a genuine outside: the side its own centroid is
+ * not on. Leaving along that normal is the only exit that clears the shape, so it wins
+ * wherever the curvature makes it unambiguous. That matters most at a tip approached from
+ * the concave side, where facing the connector points straight back through the component
+ * and the exit stub would have to cut across the body to reach open space.
+ *
+ * A straight stroke has no such side - its centroid lies on the line - so it keeps the old
+ * rule: the normal towards the side the connector arrives from, or, at a free end where
+ * there is no edge to be perpendicular to, back along the approach itself.
  */
 function outlineProject(o: { points: Vec[]; closed: boolean }, target: Vec): { pos: Vec; facing: Vec } {
+  const centroid = centroidOf(o.points);
   let best: { pos: Vec; facing: Vec; d: number } | null = null;
   for (const [a, b] of segments(o)) {
     const ex = b.x - a.x;
@@ -104,7 +220,15 @@ function outlineProject(o: { points: Vec[]; closed: boolean }, target: Vec): { p
     const perpendicular = { x: n.x * sign, y: n.y * sign };
     const onEnd = u <= EPS || u >= 1 - EPS;
     const approach = norm(away);
-    best = { pos, facing: onEnd && Math.hypot(approach.x, approach.y) > EPS ? approach : perpendicular, d };
+    const outward = norm({ x: pos.x - centroid.x, y: pos.y - centroid.y });
+    const bulge = n.x * outward.x + n.y * outward.y;
+    const facing =
+      Math.abs(bulge) >= BULGE_EPS
+        ? { x: n.x * Math.sign(bulge), y: n.y * Math.sign(bulge) }
+        : onEnd && Math.hypot(approach.x, approach.y) > EPS
+          ? approach
+          : perpendicular;
+    best = { pos, facing, d };
   }
   if (best) return { pos: best.pos, facing: best.facing };
   const c = o.points.length > 0 ? outlineCenter({ kind: 'polygon', points: o.points, closed: o.closed }) : { x: 0, y: 0 };

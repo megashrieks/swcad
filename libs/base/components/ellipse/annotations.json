@@ -1,0 +1,23 @@
+{
+  "body": [
+    {
+      "kind": "style",
+      "attrs": {
+        "fill": "params.fill",
+        "stroke": "params.stroke",
+        "stroke-width": "params.strokeWidth",
+        "stroke-dasharray": "params.dash"
+      }
+    },
+    {
+      "kind": "port",
+      "name": "{{params.port}}",
+      "direction": "inout",
+      "surface": "outline"
+    },
+    {
+      "kind": "fill_slot",
+      "name": "{{params.slot}}"
+    }
+  ]
+}

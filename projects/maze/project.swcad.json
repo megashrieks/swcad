@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "title": "maze",
+  "author": "",
+  "revision": "A",
+  "grid": {
+    "size": 20,
+    "subdivisions": 2,
+    "origin": { "x": 0, "y": 0 },
+    "unit": "px",
+    "visible": true,
+    "snap": true
+  },
+  "page": null,
+  "legend": {
+    "componentRef": "base/title-block",
+    "fields": {}
+  },
+  "sheets": ["sheets/main.sheet.json"]
+}

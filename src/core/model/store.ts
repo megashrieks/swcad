@@ -15,6 +15,9 @@ export interface Transaction {
   changes: Change[];
 }
 
+/** How many transactions the undo journal keeps in memory. */
+export const HISTORY_LIMIT = 500;
+
 let counter = 0;
 export function uid(prefix: string): string {
   counter += 1;
@@ -41,6 +44,12 @@ export class DocumentStore {
   private suppress = false;
 
   revision = 0;
+  /**
+   * Bumped whenever the undo or redo stack changes. `revision` alone cannot stand in for
+   * it: `pushHistory` records a gesture without touching the document, and undo/redo move
+   * entries between the two stacks. Persisting the journal keys off this.
+   */
+  historyRevision = 0;
 
   constructor(doc: SwDocument = emptyDocument()) {
     this.doc = doc;
@@ -54,6 +63,7 @@ export class DocumentStore {
     this.doc = doc;
     this.undoStack = [];
     this.redoStack = [];
+    this.historyRevision += 1;
     this.revision += 1;
     this.emit([{ target: 'doc', id: '*', before: null, after: null }]);
   }
@@ -95,8 +105,9 @@ export class DocumentStore {
     if (changes.length > 0) {
       if (!this.suppress) {
         this.undoStack.push({ label: this.pendingLabel, changes });
-        if (this.undoStack.length > 500) this.undoStack.shift();
+        if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift();
         this.redoStack = [];
+        this.historyRevision += 1;
       }
       this.revision += 1;
       this.emit(changes);
@@ -290,8 +301,9 @@ export class DocumentStore {
   pushHistory(label: string, changes: Change[]): void {
     if (changes.length === 0) return;
     this.undoStack.push({ label, changes });
-    if (this.undoStack.length > 500) this.undoStack.shift();
+    if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift();
     this.redoStack = [];
+    this.historyRevision += 1;
   }
 
   canUndo(): boolean {
@@ -309,6 +321,7 @@ export class DocumentStore {
     for (let i = txn.changes.length - 1; i >= 0; i -= 1) this.applyChange(txn.changes[i], 'before');
     this.suppress = false;
     this.redoStack.push(txn);
+    this.historyRevision += 1;
     this.revision += 1;
     this.emit(txn.changes);
   }
@@ -320,6 +333,7 @@ export class DocumentStore {
     for (const change of txn.changes) this.applyChange(change, 'after');
     this.suppress = false;
     this.undoStack.push(txn);
+    this.historyRevision += 1;
     this.revision += 1;
     this.emit(txn.changes);
   }
@@ -330,6 +344,23 @@ export class DocumentStore {
 
   redoLabel(): string | null {
     return this.redoStack.at(-1)?.label ?? null;
+  }
+
+  /** The journal as plain data, newest entries last, for writing to disk. */
+  exportHistory(limit = HISTORY_LIMIT): { undo: Transaction[]; redo: Transaction[] } {
+    return { undo: this.undoStack.slice(-limit), redo: this.redoStack.slice(-limit) };
+  }
+
+  /**
+   * Adopt a journal read back from disk. The document is *not* touched — the caller has
+   * already loaded the matching sheet — so this does not mark anything dirty; it only
+   * wakes listeners up so the undo buttons stop looking empty.
+   */
+  importHistory(undo: Transaction[], redo: Transaction[]): void {
+    this.undoStack = undo.slice(-HISTORY_LIMIT);
+    this.redoStack = redo.slice(-HISTORY_LIMIT);
+    this.historyRevision += 1;
+    for (const fn of this.listeners) fn();
   }
 
   /** Notify listeners without recording history (used for transient drag previews). */

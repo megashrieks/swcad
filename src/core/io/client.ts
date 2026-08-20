@@ -58,10 +58,24 @@ export const api = {
       body: JSON.stringify({ dir, files, remove }),
     }),
 
-  readFile: (path: string) => request<{ content: string }>(`/fs/read?path=${encodeURIComponent(path)}`),
+  /** Reads a file. `optional` turns a missing file into `content: null` instead of an error. */
+  readFile: (path: string, options: { optional?: boolean } = {}) =>
+    request<{ content: string | null; missing?: boolean }>(
+      `/fs/read?path=${encodeURIComponent(path)}${options.optional ? '&optional=1' : ''}`,
+    ),
 
   writeFile: (path: string, content: string) =>
     request<{ ok: boolean }>('/fs/write', { method: 'POST', body: JSON.stringify({ path, content }) }),
+
+  /**
+   * Fire-and-forget write for page teardown, where a normal request would be cancelled
+   * with the document. Returns false when the browser refuses to queue it.
+   */
+  writeFileBeacon: (path: string, content: string): boolean => {
+    if (typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') return false;
+    const blob = new Blob([JSON.stringify({ path, content })], { type: 'application/json' });
+    return navigator.sendBeacon('/api/fs/write', blob);
+  },
 
   mkdir: (path: string) => request<{ ok: boolean }>('/fs/mkdir', { method: 'POST', body: JSON.stringify({ path }) }),
 

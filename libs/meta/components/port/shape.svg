@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <line id="aim" x1="12" y1="12" x2="22" y2="12" stroke="var(--sw-port)" stroke-width="1" />
+  <circle id="dot" cx="12" cy="12" r="3.5" fill="var(--sw-port)" />
+  <circle id="body" cx="12" cy="12" r="0" fill="none" />
+</svg>

@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 100" width="160" height="100">
-  <path id="body" d="M 80 0 L 160 50 L 80 100 L 0 50 Z" fill="#ffffff" stroke="#2e3440" stroke-width="1.5" />
-  <text id="title" x="80" y="50" text-anchor="middle" dominant-baseline="middle" font-family="Inter, Segoe UI, sans-serif" font-size="13" fill="#2e3440">Decision?</text>
-  <circle id="p-n" cx="80" cy="0" r="3.5" fill="#5e81ac" />
-  <circle id="p-e" cx="160" cy="50" r="3.5" fill="#5e81ac" />
-  <circle id="p-s" cx="80" cy="100" r="3.5" fill="#5e81ac" />
-  <circle id="p-w" cx="0" cy="50" r="3.5" fill="#5e81ac" />
+  <path id="body" d="M 80 0 L 160 50 L 80 100 L 0 50 Z" fill="var(--sw-surface)" stroke="var(--sw-ink)" stroke-width="1.5" />
+  <text id="title" x="80" y="50" text-anchor="middle" dominant-baseline="middle" font-family="Inter, Segoe UI, sans-serif" font-size="13" fill="var(--sw-ink)">Decision?</text>
+  <circle id="p-n" cx="80" cy="0" r="3.5" fill="var(--sw-port)" />
+  <circle id="p-e" cx="160" cy="50" r="3.5" fill="var(--sw-port)" />
+  <circle id="p-s" cx="80" cy="100" r="3.5" fill="var(--sw-port)" />
+  <circle id="p-w" cx="0" cy="50" r="3.5" fill="var(--sw-port)" />
 </svg>

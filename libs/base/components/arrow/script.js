@@ -19,20 +19,31 @@ defineComponent({
       stub: p.stub || 18,
       clearance: p.clearance || 10,
       router: p.router || 'auto',
-      bendPenalty: p.bendPenalty === undefined ? 25 : p.bendPenalty,
+      bendPenalty: p.bendPenalty === undefined ? 0 : p.bendPenalty,
     };
 
     var pts;
     if (style === 'straight') pts = route.straight(a.pos, b.pos, opts);
-    else if (style === 'curve') pts = route.curve(a.pos, b.pos, opts);
-    else pts = route.orthogonal(a.pos, b.pos, opts);
+    else if (style === 'curve') {
+      // A curve leaves each port along its normal and the length of that lead-in is what
+      // shapes it. The orthogonal stub is a clearance, far too short here: on a long run it
+      // makes the first span a stub of a few units against a span of hundreds, and the
+      // smoothing overshoots into a hook. Let the curve pick a lead-in from the span unless
+      // one was asked for.
+      pts = route.curve(a.pos, b.pos, {
+        fromFacing: a.facing,
+        toFacing: b.facing,
+        waypoints: ctx.connection.waypoints,
+        stub: p.stub,
+      });
+    } else pts = route.orthogonal(a.pos, b.pos, opts);
 
     var d =
       style === 'curve'
         ? geometry.smoothPath(pts)
         : geometry.polylinePath(pts, p.radius === undefined ? 6 : p.radius);
 
-    var stroke = p.stroke || '#3b4252';
+    var stroke = p.stroke || 'var(--sw-ink)';
     var width = p.strokeWidth || 1.6;
 
     var children = [
@@ -70,7 +81,7 @@ defineComponent({
           width: String(p.label).length * 6.8 + 8,
           height: 16,
           rx: 3,
-          fill: '#ffffff',
+          fill: 'var(--sw-surface)',
           'fill-opacity': 0.9,
         }),
       );

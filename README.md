@@ -17,7 +17,24 @@ through a standalone Node server.
 
 On boot the app opens `projects/demo`, creating it if needed. Open a different folder with
 `?project=<absolute path>` — anything under `<app>/projects` or already-open project roots is
-allowed; the server rejects traversal and symlink escapes.
+allowed; the server rejects traversal and symlink escapes. When you do not name one, the project
+that was opened is written back into the URL, so the address always describes the whole screen.
+
+### URLs
+
+Every view is a link you can bookmark, reload, share and reach with the back button. The path says
+what you are looking at; `?project=` is carried across every navigation untouched.
+
+| Path | View |
+|---|---|
+| `/` | the sheet |
+| `/component` | the component editor, on the component picker |
+| `/component/<lib>/<id>` | that component, open for editing |
+| `/component/<lib>/<id>/<file>` | ...with that package file in the code pane |
+
+Opening another component adds a history entry; switching file tab rewrites the current one, so
+**Back** leaves the component rather than walking its tabs. An unrecognised path, half a component
+ref or a file the package does not have are rewritten to what is actually on screen.
 
 ## What is in the box
 
@@ -27,13 +44,16 @@ allowed; the server rejects traversal and symlink escapes.
 | Alignment highlighting | Every node contributes its bbox edges, centre and port coordinates to a global `AlignmentIndex`; while placing, dragging or connecting, matching rows/columns light up and snap. With **Snap to grid** on, a guide can only win if the resulting position is still on the grid lattice, so alignment can never drag a node off-grid |
 | Optional page | ISO A0–A5, ANSI A–E, Letter, Tabloid or custom; orientation, margins, units-per-mm, blueprint frame with zone ticks and labels. Off by default (infinite canvas) |
 | Legend / title block | A normal library component pinned bottom-right of the page, bound to document fields. Only available when a page is selected. The same component can also be dropped on the sheet, where each copy carries its own title/author/date/rev/size/sheet and falls back to the document metadata while a field is left blank |
-| Component libraries | A library is a folder with `library.json` plus one folder per component (`components/<id>/component.json`, `shape.svg`, `annotations.json`, `script.js`); it can export any number of components |
-| Annotated SVG components | Elements are tagged as `port`, `label`, `handle`, `fill_slot`, `anchor` or `hit_area`. The annotation is a property of the shape: a circle annotated as a port is connectable anywhere on its circumference |
+| Component libraries | A library is a folder with `library.json` plus one folder per component (`components/<id>/`); it can export any number of components. A library marked `editorOnly` is offered in the component editor and not on sheets |
+| Components are documents | A component's drawing is a `document.json` — byte-for-byte the format a sheet uses. It is drawn on the same canvas with the same tools, and compiled into flat annotated SVG when the library loads. A component may also be written directly as `shape.svg` + `annotations.json`; that is the primitive form `libs/meta` is made of |
+| Annotated SVG components | Elements are tagged as `port`, `label`, `handle`, `fill_slot`, `anchor`, `hit_area` or `style`. The annotation is a property of the shape: a circle annotated as a port is connectable anywhere on its circumference. Fields may be written `{{params.x}}`, so one drawing means whatever the instance that placed it says |
 | Component scripting | Sandboxed JS with `render`, `style` and `ports` hooks; scripts can read the whole graph and return SVG |
+| Markdown text | The `meta/text` part is a block of Markdown — headings, bullets, ordered items, quotes, fences and inline `**bold**` / `*italic*` / `` `code` `` / `~~strike~~`. Double-click to edit the source in place. It has no parameters: its box is measured from the rendered text, so what you select is what you see |
 | Connectors | Port-to-port with live preview, waypoints, straight/orthogonal/curve routers. The orthogonal router is an A* search that runs along the document's grid lines where it can (and an obstacle-derived lattice where it can't), so connectors staircase around obstacles instead of cutting through them. Endpoints follow the nodes they are attached to |
 | Attachment | Any node can be pinned to another node's `anchor`; cycles are detected |
-| Component editor | The same editor surface plus a `meta` library of primitives and annotation markers, a parameter-schema editor, a script editor and a live preview |
+| Component editor | The sheet editor, pointed at a component's document. It opens on a picker — everything in the project on one side, the templates on the other — rather than inventing a blank component. Draw with the `meta` palette of primitives and annotation markers; the inspector shows the properties of whatever you picked, because what you picked is an ordinary node. The remaining package files (manifest, scripts) are edited as text beside the canvas |
 | Export | SVG, PNG, and print-to-PDF; scripts are evaluated at export time and the legend is included |
+| Dialogs | Questions are asked in the app's own modal — `window.alert`/`confirm`/`prompt` are not used anywhere. Destructive answers are red, Escape and the backdrop mean cancel, focus moves in and comes back, and a second question queues behind the first |
 
 ## Layout
 
@@ -43,35 +63,99 @@ src/core/       framework-agnostic engine (no React, no DOM assumptions)
   model/        document types, mutable store with undo/redo, GraphEngine
   spatial/      AlignmentIndex (row/column highlighting) + SpatialHash
   script/       SVG parse/build/sanitize, sandbox, dependency tracker
+  theme/        the --sw-* canvas palette and its resolver
   library/      manifest parsing and the component registry
   io/           versioned (de)serialization + the fs API client
 src/editor/     shared editor surface: controller, layers, panels, renderer, export
 src/sheet/      sheet wiring: page frame + legend
 src/component/  component editor: meta library, draft compiler
+src/ui/         the widget library: buttons, number input, Monaco pane, dialogs, fields
+src/ui/pomavo/  vendored subset of @pomavo/ui — shadcn/Radix primitives + theme registry
+src/routes.ts   the URL <-> view mapping
 server/         fs API with project-root sandboxing (Vite middleware + standalone)
 libs/base/      the shipped base library
 projects/       default location for projects created by the app
 ```
 
 `src/editor/EditorSurface.tsx` is the crux of "the main editor and the component editor share the
-same component": both mount the exact same surface, controller, tools and panels — the component
-editor simply hands it a draft document and mounts the extra `meta` library.
+same component": both mount the exact same surface, controller, tools and panels. The component
+editor hands it the component's own `document.json` and mounts the extra `meta` library — a
+component *is* a document, so there is nothing else to reconcile.
 
-The `meta` library offers the `rect`, `ellipse`, `arc`, `line` and `text` primitives plus one marker
-per annotation kind. An arc is inscribed in its box: `start`/`end` are degrees with 0 = east turning
-clockwise, and `close` draws it as an open arc, a chord or a pie slice.
+`libs/meta` is an ordinary library marked `editorOnly`. It offers the `rect` and `text` primitives
+plus one marker per annotation kind. The shapes that are just as useful on a sheet — `line`, `arc`
+and `ellipse` — live in `base` instead, so you can draw with them anywhere; `LibraryRegistry.MOVED`
+keeps drawings that still name them `meta/…` working. An arc is inscribed in its box: `start`/`end`
+are degrees with 0 = east turning clockwise, and `close` draws it as an open arc, a chord or a pie
+slice.
+
+`src/core/library/compile.ts` flattens a component's document into the SVG and annotation table a
+placed instance renders: bounds from the non-marker nodes, ids namespaced per node, placement baked
+into each element's own transform, inherited annotations re-exported and the rest resolved in
+place. It runs once per component when a library loads, in dependency order.
+
+`src/core/text/` measures and lays out text. Widths come from a canvas 2D context, not from an
+average glyph width, so a label's box is the box the browser paints — that is what decides where
+you can click. `markdown.ts` turns a Markdown source into explicitly positioned `<tspan>`s, which
+is what a `label` annotation with `"markdown": true` draws; nothing depends on how SVG collapses
+whitespace, and the measured block is exactly the block that appears.
 
 A node's `rotation` turns it about the middle of its box, so a rotated shape keeps its position
 instead of swinging around its top-left corner. The pivot is resolved by the graph (never stored in
-the document), is honoured by ports, anchors, bounds and export, and the component editor compiles
-it into the component's own SVG so the live preview matches the canvas.
+the document) and is honoured by ports, anchors, bounds, export and the compiler.
+
+## Selecting
+
+Selection follows the drawing, never the box around it.
+
+- **A click picks what is painted under the pointer.** The browser has already hit-tested the SVG
+  the editor drew — through every rotation, scale, fill rule and stacking decision — so the editor
+  asks it rather than re-deriving an answer from bounds. Clicking the hollow middle of a diamond or
+  a ring therefore goes *through* to whatever is behind it, and clicking a shape means that shape,
+  which is what the Inspector then shows. A shape too thin to aim at is what the `hit_area`
+  annotation is for; a few pixels of slack around the pointer cover ordinary hairlines and glyphs.
+- **A marquee takes only what it swallows whole.** An item joins the selection when its entire
+  bounding box lies inside the rect, so a sweep that merely brushes past a neighbour leaves it
+  alone. Drag the box *around* what you mean.
+
+Hold `Shift` to add to the selection either way.
+
+The Inspector appears only while something is selected, and it **floats over the drawing** rather
+than holding a column of its own. Selecting is the most ordinary thing you can do on a canvas, and
+it must not resize the canvas underneath the pointer: a pane that came and went would re-frame the
+drawing mid-gesture and move whatever you were about to click on next.
+
+### Editing several items at once
+
+With more than one item selected the Inspector stops describing any single part and shows the
+ground the selection has in common:
+
+- **Only shared properties appear.** A property is shared when every selected item declares one of
+  the same name and type — and, for a dropdown, the same options. Select six shapes and `Stroke`
+  stays; select a line among them and `Fill` disappears, because a line has none. Position, size and
+  rotation are offered only while every item is a node, since a connector has no box of its own.
+- **A field shows a value only when the selection agrees on it.** Where the items differ the field
+  is blank and reads *Mixed*; a checkbox shows a dash.
+- **Typing writes to everything selected.** A blank, mixed field is the way to make a selection
+  agree: give it a value and all of them take it. Each item keeps its own defaults, so clearing a
+  field returns each to whatever *it* declared rather than to a neighbour's value. The whole write is
+  one edit — a single undo puts every item back.
+
+### Paint order
+
+The Inspector's header carries the four ordering buttons — send to back, back one, forward one,
+bring to front. A step moves the selection past exactly one neighbour that is *not* also selected,
+so a group travels together and keeps its own internal order instead of collapsing into a pile. The
+pairs grey out at the ends of the stack, which is how the panel tells you something is already at
+the front without you having to click to find out. Connectors have no ordering: they are painted as
+their own layer beneath every component, so there is no stack for them to move through.
 
 ## Annotating a primitive
 
-An annotation is a **property of the shape**, not a marker you place beside it. Every primitive in
-the `meta` library carries an `Annotate as` parameter: a rectangle, ellipse, arc or line can become a
-`port`, an `anchor` or a `hit area`, and a text primitive can become a `label`. Nothing extra is
-emitted — the shape's own element gets the annotation.
+An annotation is a **property of the shape**, not a marker you place beside it. Every drawable
+primitive in the `meta` library carries a `Port name` parameter: fill it in and the shape's own
+element becomes a port. Leave it blank and the annotation is dropped. The same pattern gives every
+primitive a `Style slot` name, which is how a script drives a drawn component.
 
 A port annotation has a `surface`:
 
@@ -89,7 +173,8 @@ edge as the other end moves, and the router still leaves along a sensible direct
 `base/box` and `base/circle` keep their four compass ports *and* expose their body outline as an
 `edge` port. Hit-testing prefers a compass port wherever the two coincide, and an outline port is
 only grabbed with the **Connect** tool so dragging near a node's border in select mode still moves
-the node.
+the node. An outline that spans its own shape — a line or an arc annotated as a port along its
+whole length — counts as body-sized whatever its size, so the select tool can still pick it up.
 
 ## Project layout on disk
 
@@ -97,24 +182,102 @@ the node.
 <project>/
   project.swcad.json        title, author, grid/page/legend defaults, sheet list
   sheets/main.sheet.json    a graph document
+  .swcad/history/           one undo journal per sheet, written by auto-save
   libs/<libname>/
     library.json
     components/<id>/        one folder per component
       component.json        manifest: id, name, version, params
-      shape.svg             the drawing; its viewBox sets the default size
-      annotations.json      element id -> port / label / handle / slot / anchor / hit area
+      document.json         the drawing, as a document — same format as a sheet
       script.js             optional behaviour
+      README.md             optional notes
     shared/<name>.js        importable from scripts via ctx.require('lib:name')
 ```
 
+A component drawn as raw markup replaces `document.json` with `shape.svg` (its viewBox sets the
+default size) and `annotations.json` (element id -> port / label / handle / slot / anchor / hit
+area / style). That is the primitive form; `libs/meta` is written that way, and so is anything
+whose art comes out of a drawing program.
+
+Every one of these files gets a tab in the component editor, `document.json` included — asking
+where a component keeps its geometry and finding no answer in the file list is worse than a tab
+you cannot type into. That one is **read-only** and always live: it shows the drawing as the
+canvas has it this instant, not as it was last written, because while a component is open the
+document store owns the drawing and re-serialises it on every change. Anything typed there would
+be discarded by the next nudge of a shape, so the drawing is edited on the canvas and read here.
+
 Libraries are discovered in `<app>/libs` (read-only, shipped) and `<project>/libs` (writable).
 The server watches both and hot-reloads the registry when files change.
+
+## Saving
+
+The sheet saves itself. An edit is written once the burst it belongs to settles (~0.7 s), and a
+continuous gesture is checkpointed at least every 4 s; a save is held back until the pointer
+comes up so a half-finished drag never reaches disk, and leaving the tab flushes whatever is
+outstanding. Writes never overlap, and a failed one keeps the work queued and retries. The
+toolbar badge reads **Saved**, **Unsaved**, **Saving…** or **Save failed** — hover it for the
+error. `Ctrl+S` is still there; it just skips the wait.
+
+The undo journal is saved with the sheet, into `.swcad/history/<sheet>.history.json`, so `Ctrl+Z`
+still walks back through your work after a reload. It stores the last 200 transactions per stack
+(oldest dropped first, capped at 1 MB) and is stamped with a fingerprint of the sheet it was
+recorded against: edit the sheet JSON by hand and the journal is discarded rather than replayed
+against a document it no longer describes. Deleting `.swcad/` only costs undo depth.
+
+The component editor is separate — component packages are still saved explicitly, so a half-typed
+script is never hot-reloaded into the sheet.
 
 ## Base library
 
 `box`, `circle`, `diamond`, `note`, `arrow` and `title-block`. `box` demonstrates state-driven
 styling ("turn green when every port is connected") and `arrow` is a fully scripted, graph-aware
 connector that inspects nearby obstacles and picks its own path.
+
+## Theming
+
+The chrome is built on a vendored subset of **`@pomavo/ui`** in `src/ui/pomavo/` — shadcn-style
+Radix primitives (button, input, select, checkbox, tabs, dialog, dropdown, tooltip, …), a `cn()`
+helper, Tailwind v4 as the utility layer, and Pomavo's theme registry. Only the two host-agnostic
+theme files were copied; nothing from Pomavo's product code came with them.
+
+- **Default theme:** Ayu Dark. The toolbar's theme button switches appearance (light / dark /
+  system) and palette (Ayu Mirage, Ayu Dark, and five accent themes). Both persist to
+  `localStorage` under `swcad.theme`.
+- **How it reaches the app:** `ThemeProviderBase` writes 33 `--color-*` custom properties onto
+  `<html>` and toggles `light`/`dark` plus `data-color-theme`. `src/ui/theme.css` maps swcad's own
+  tokens (`--bg`, `--line`, `--text`, `--accent`, …) and the `--sw-*` canvas palette onto those, so
+  the whole editor — chrome *and* drawing — re-themes from one switch.
+- **Style:** *borderless* — separation comes from background steps (`--hover`, `--sunken`) and
+  spacing rather than outlines. Chrome appears on hover; borders survive only where they carry
+  meaning (the page sheet, the focus ring, the active tab underline).
+- **Gotcha:** `theme.css` is unlayered, so any rule in it outranks *every* Tailwind utility
+  (Tailwind v4 emits into `@layer utilities`). Classes that are also passed to a Pomavo component
+  — `.btn`, `.input`, `.check` — are therefore kept to layout only. Do not put `background`,
+  `border` or `color` on them.
+
+### The canvas palette
+
+The drawing follows the theme too, through a set of `--sw-*` custom properties declared on top of
+the `--color-*` ones: `--sw-paper`, `--sw-surface`, `--sw-ink`, `--sw-ink-muted`, `--sw-line`,
+`--sw-accent`, `--sw-accent-2`, `--sw-success`, `--sw-warning`, `--sw-danger`, `--sw-port` and
+`--sw-1`…`--sw-5`. The grid, the page frame, the guides and the selection overlay all read from
+them, and so may any component:
+
+```svg
+<rect id="body" fill="var(--sw-surface)" stroke="var(--sw-ink)" />
+```
+
+Browsers resolve `var()` inside SVG presentation attributes, so on screen this costs nothing — the
+attribute passes through the sanitiser untouched and the engine paints it. A component that writes
+a literal colour instead keeps that colour forever; nothing rewrites authored hex. The shipped
+`base` and `meta` libraries use tokens, with the sticky note deliberately left yellow.
+
+Two places need real colour strings and get them from `readCanvasPalette()`, which resolves each
+token through a probe element (`getPropertyValue` would hand back an unresolved `color-mix(...)`):
+
+- `GridLayer` / `HighlightLayer`, which paint into a 2D canvas;
+- **export** — a standalone SVG carries no stylesheet, so `exportSvg` substitutes every
+  `var(--sw-*)` with its current value and paints a matching background. An export looks like the
+  screen it came from, dark theme included.
 
 ## Rendering model
 
@@ -132,18 +295,95 @@ actually changes inside the region it inspected — not on every frame.
 
 ## Connector routing
 
+A connector is drawn by one of three routers, picked from the toolbar's **Routing** group or
+from `Routing` in the inspector:
+
+| Router | What it draws |
+| --- | --- |
+| **Orthogonal** | right angles, searched around every obstacle in the way. The default |
+| **Straight** | a direct line from port to port, obstacles ignored |
+| **Curved** | a smooth curve that leaves each port along its normal |
+
+The toolbar group re-routes whatever connectors are selected and remembers the choice for the
+next connector you draw, so it works as a tool setting as much as a property; with a mixed
+selection no member of the group is lit. The style is stored per connection, so two connectors
+between the same pair of ports can route differently.
+
+The rest of this section is about the orthogonal router, which is the one that has to think.
+
 An orthogonal connector leaves each port along its normal, and the segment between the two
 stub ends is found with **A\*** over a sparse routing lattice: one line just outside each side
 of every nearby obstacle, plus the lines through the ports and a mid lane. Moves cost their
-length plus a **bend penalty** per corner (`Bend cost` on the arrow, default 25), so routes
+length plus a **bend penalty** per corner (`Bend cost` on the arrow, default 0), so routes
 come out short, straight and stable, and a connector will staircase around any arrangement of
 nodes rather than pick the least-bad of a few fixed elbow shapes. A route never retraces its
-own exit stub, and never arrives at a port from behind it.
+own exit stub, and never arrives at a port from behind it. Raise the bend cost to buy fewer
+corners at the price of a longer path.
 
-Clearance is tried in a ladder (full, half, quarter, none) so tightly packed nodes still get a
-legal path, and the old candidate-shape search remains as a fallback for lattices too large to
-search or endpoints that are genuinely walled in. Set the arrow's `Router` param to `simple`
-to force that engine.
+Obstacles are one box per **drawn primitive**, not one box per node. A component is mostly
+empty space between its strokes — a maze, three stacked rails, a body between two arc caps —
+and treating it as a single box meant a connector could neither route through it nor leave one
+of its strokes without crossing all the others. So a route threads the gaps a component
+actually has, and the stub only has to clear the stroke carrying its own port.
+
+Declare a **`hit_area`** to say otherwise: a component with one is handed to the router as a
+single solid box, whatever it happens to be drawn from. That is the right answer for anything
+whose inside is meant to read as filled even when it is drawn hollow.
+
+Which nodes count as "nearby" is not a fixed radius. The search starts from a band around the
+straight line between the two ports, and then **grows to include whatever it finds**: every
+obstacle inside the band widens the region to that obstacle's full extent, and the region is
+queried again until nothing new turns up. A route that has to detour leaves the band it started
+in, and anything out there the router had not been told about it would happily drive straight
+through — so an obstacle you must get around brings its own neighbourhood with it.
+
+None of this is capped. There is no ceiling on primitives per component, obstacles per search,
+grid lines per axis or lattice nodes, because every such ceiling was a silent wrong answer: the
+search would decline, the old candidate-shape engine would take over, and the connector would
+cut through a wall rather than admit it had given up. Lane coordinates are deduplicated and
+blocking is marked per obstacle over the cells it covers, so a figure of hundreds of thin
+strokes on a regular pitch — a maze, a title block — costs far less than its count suggests.
+A 40 x 20 maze is 364 separate obstacles and routes in about a second.
+
+Routes keep a **clearance** from every obstacle, which is what stops a connector running flush
+against the thing it is avoiding. Clearance is resolved per obstacle rather than for the route
+as a whole: a node barely narrower than the corridor it sits in cannot have the full clearance
+on both its own bounds and the wall beside it, so those two split the gap between them, and
+every obstacle clear of both endpoints keeps the full amount. Without that, one pinched
+endpoint would drag the entire route down to its own clearance and the connector would hug
+walls from end to end.
+
+Clearance is then tried in a ladder (full, half, quarter, none) so tightly packed nodes still
+get a legal path, and the old candidate-shape search remains as a fallback for endpoints that
+are genuinely walled in. Set the arrow's `Router` param to `simple` to force that engine.
+
+The search never sees the stub segments — they run from the port to the first lattice node, and
+from a surface port that segment is a diagonal — and it lets an endpoint escape whatever it
+starts inside. So the finished path is re-checked against the raw obstacles before it is
+accepted, exempting only what an endpoint is genuinely inside. A path that fails drops to the
+next rung of the ladder.
+
+The curved router's only shape control is how far the curve runs before it turns, and it takes
+that from the distance between the ports rather than from the orthogonal router's clearance
+stub: on a long run a lead-in of a few units against a span of hundreds makes the smoothing
+overshoot into a hook at the port.
+
+An `outline` port meets the connector wherever the geometry says, which on a long straight edge
+is an arbitrary fractional coordinate. While **Snap to grid** is on, that meeting point then
+slides *along its own edge* to the nearest grid line, provided one lies within three quarters of
+a step — so a connector leaving a line or a box edge starts on the lattice like every other run.
+The point never leaves the stroke it was dragged from and its facing normal is unchanged, and
+curves are left alone: an ellipse has no straight run, and an arc's flattened segments are far
+shorter than a grid step. The drag preview, the port marker and the resolved connection all ask
+the same function, so the preview cannot disagree with the result.
+
+Ports of one component that share a **name** are one logical port with several pins. A connector
+bound to any of them attaches to whichever pin is easiest to reach — nearest attach point, plus a
+penalty worth the node's width or height for a pin whose facing normal points away from the other
+end — and it hops between them as either end moves, without the stored connection changing. Ties
+go to the stored pin so nothing twitches mid-drag. The group also shares its connection list, so
+every pin reads as connected once one of them is wired, and two pins of the same group cannot be
+joined to each other.
 
 ## Keyboard
 
@@ -154,17 +394,21 @@ to force that engine.
 | Wheel | zoom in/out — the first notch centres the point under the cursor, then the session zooms about the centre (KiCad-style) |
 | Horizontal scroll / `Shift` + wheel | pan horizontally |
 | `Ctrl` + wheel / trackpad pinch | zoom anchored at the cursor, without recentring |
+| `F` / `Shift+1` | zoom to fit the drawing in the viewport |
 | `Ctrl+Z` / `Ctrl+Shift+Z` | undo / redo |
 | `Ctrl+A` / `Ctrl+D` | select all / duplicate |
 | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | copy / cut / paste. A paste lands under the cursor (snapped) and cascades if you paste again without moving; connections come along when both of their endpoints are copied, and it works between the sheet and component editors |
 | `Delete` | delete selection |
 | Arrows | nudge (with `Shift` for a larger step) |
 | `Esc` | cancel the current gesture |
-| `Ctrl+S` | save the sheet |
-| Double-click | edit a `label` annotation in place |
+| `Ctrl+S` | save the sheet now (it auto-saves anyway) |
+| Double-click | edit a `label` annotation in place. A Markdown label opens a multi-line editor: `Ctrl`/`Cmd`+`Enter` commits, `Esc` cancels |
 
 The toolbar is icon-only (Radix icons); every button carries an `aria-label` and a tooltip that
-spells out the action and its shortcut.
+spells out the action and its shortcut. It drives whichever canvas is in front, so the tools,
+undo/redo, zoom, snap/port toggles and the exporters all work the same way in the component
+editor — where **Fit** frames the component at the same magnification opening it does, and where
+**Save** and `Ctrl+S` save the component rather than the sheet behind it.
 
 ## Scripts
 
@@ -172,8 +416,6 @@ spells out the action and its shortcut.
 npm run dev        Vite dev server + fs API
 npm run build      tsc --noEmit && vite build
 npm run preview    standalone Node server over dist/
-npm test           Vitest unit tests
-npm run test:e2e   headless browser smoke flow (needs `npm run dev` running)
 ```
 
 ## Docs

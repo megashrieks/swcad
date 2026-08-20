@@ -1,0 +1,16 @@
+{
+  "id": "meta",
+  "name": "Meta",
+  "version": "1.0.0",
+  "description": "The markers that say what a shape means, plus the shapes that only make sense inside a component. Only offered while editing a component.",
+  "editorOnly": true,
+  "components": [
+    "components/rect",
+    "components/text",
+    "components/port",
+    "components/label",
+    "components/anchor",
+    "components/handle",
+    "components/hit-area"
+  ]
+}

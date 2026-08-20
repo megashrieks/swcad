@@ -2,6 +2,7 @@ import { api, type ComponentTemplate } from '@core/io/client';
 import type { ComponentEntry, LibraryRegistry } from '@core/library/registry';
 import type { LoadedLibrary, SwDocument } from '@core/model/types';
 import { packageFromDefinition, type PackageFiles } from '../../server/package-format.js';
+import { showConfirm } from '../ui/Dialog';
 
 /** Where a component package lives inside its library. */
 export const packageDir = (lib: LoadedLibrary, id: string): string => `${lib.dir}/components/${id}`;
@@ -72,7 +73,12 @@ export async function confirmAndDelete(
   if (lib.readOnly) throw new Error(`${entry.libId} is read-only`);
   const used = usageCount(doc, entry.ref);
   const warning = used > 0 ? `\n\n${used} instance(s) on the current sheet will break.` : '';
-  if (!window.confirm(`Delete ${entry.def.name} (${entry.ref}) from disk?${warning}`)) return false;
+  const ok = await showConfirm(`Delete ${entry.def.name} (${entry.ref}) from disk?${warning}`, {
+    title: 'Delete component',
+    confirmLabel: 'Delete',
+    tone: 'danger',
+  });
+  if (!ok) return false;
   await deleteComponent(entry, lib);
   return true;
 }

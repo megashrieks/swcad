@@ -1,0 +1,7 @@
+{
+  "id": "generative",
+  "name": "Generative",
+  "version": "1.0.0",
+  "description": "Components with no stored drawing: give them a size and a seed and they draw themselves.",
+  "components": ["components/maze"]
+}

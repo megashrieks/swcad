@@ -1,0 +1,64 @@
+{
+  "id": "label",
+  "name": "Label",
+  "version": "1.0.0",
+  "category": "marker",
+  "description": "Text that follows a parameter of the component you are drawing, editable in place once it is placed on a sheet.",
+  "resizable": false,
+  "params": [
+    {
+      "name": "bind",
+      "type": "string",
+      "label": "Follows",
+      "default": "params.title"
+    },
+    {
+      "name": "sample",
+      "type": "string",
+      "label": "Sample text",
+      "default": "Title"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Size",
+      "default": 14,
+      "min": 1
+    },
+    {
+      "name": "weight",
+      "type": "enum",
+      "label": "Weight",
+      "default": "400",
+      "options": [
+        "400",
+        "500",
+        "600",
+        "700"
+      ]
+    },
+    {
+      "name": "align",
+      "type": "enum",
+      "label": "Align",
+      "default": "middle",
+      "options": [
+        "start",
+        "middle",
+        "end"
+      ]
+    },
+    {
+      "name": "color",
+      "type": "color",
+      "label": "Colour",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "slot",
+      "type": "string",
+      "label": "Style slot",
+      "default": ""
+    }
+  ]
+}

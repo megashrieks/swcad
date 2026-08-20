@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type * as Monaco from 'monaco-editor';
 import { languageFor } from './languages';
+import { useTheme } from './theme';
 
 export { languageFor };
 
@@ -42,6 +43,7 @@ export function CodeEditor({
   /** The document the live models belong to; see the `scope` prop. */
   const openScope = useRef(scope);
   const [ready, setReady] = useState(false);
+  const { colorTheme, resolvedMode } = useTheme();
 
   useEffect(() => {
     let cancelled = false;
@@ -54,7 +56,7 @@ export function CodeEditor({
         if (cancelled || !host.current) return;
         monaco.current = mod;
         const made = mod.editor.create(host.current, {
-          theme: module.MONOKAI_PRO,
+          theme: module.APP_THEME,
           automaticLayout: true,
           fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
           fontSize: 12,
@@ -91,6 +93,22 @@ export function CodeEditor({
     for (const model of models.current.values()) model.dispose();
     models.current.clear();
   }, [scope]);
+
+  // The code pane wears the app's palette, so it has to be repainted when that changes.
+  // A frame late, because the theme provider writes the new custom properties in an
+  // effect of its own and the theme is built by reading them back off the document.
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    const id = requestAnimationFrame(() => {
+      if (cancelled) return;
+      void import('./monaco').then((module) => module.applyEditorTheme());
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(id);
+    };
+  }, [ready, colorTheme, resolvedMode]);
 
   useEffect(() => {
     const mod = monaco.current;

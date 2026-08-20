@@ -2,8 +2,8 @@
 defineComponent({
   applyFill: function (params) {
     return {
-      fill: params.fill || '#ffffff',
-      stroke: params.stroke || '#2e3440',
+      fill: params.fill || 'var(--sw-surface)',
+      stroke: params.stroke || 'var(--sw-ink)',
     };
   },
 });

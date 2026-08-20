@@ -1,10 +1,27 @@
 import type { Rect, Transform, Vec } from '../geometry/index';
 
-export type AnnotationKind = 'port' | 'label' | 'handle' | 'fill_slot' | 'anchor' | 'hit_area';
+export type AnnotationKind = 'port' | 'label' | 'handle' | 'fill_slot' | 'anchor' | 'hit_area' | 'style';
 
 export type PortDirection = 'in' | 'out' | 'inout' | 'none';
 
-export interface PortAnnotation {
+/**
+ * Fields every annotation may carry.
+ *
+ * `inherit` decides what happens when the component is *flattened into another one* —
+ * a component is a document, so anything you draw may itself be made of components:
+ *
+ * - `true`  the annotation is re-exported, so a port drawn inside a component is a port
+ *           of the component that contains it.
+ * - `false` the annotation is consumed: its effect is baked into the drawing and the
+ *           outer component never hears about it (fixed text, styling).
+ *
+ * Ports, anchors, handles and hit areas default to `true`; labels and styling to `false`.
+ */
+interface AnnotationBase {
+  inherit?: boolean;
+}
+
+export interface PortAnnotation extends AnnotationBase {
   kind: 'port';
   name: string;
   direction?: PortDirection;
@@ -20,16 +37,21 @@ export interface PortAnnotation {
   max?: number;
 }
 
-export interface LabelAnnotation {
+export interface LabelAnnotation extends AnnotationBase {
   kind: 'label';
   name?: string;
   /** Dotted path into the render context, e.g. `params.title` or `node.id`. */
   bind: string;
   align?: 'start' | 'center' | 'end';
   editable?: boolean;
+  /**
+   * Render the bound value as Markdown (see `core/text/markdown.ts`) instead of as a single
+   * run of text. Only meaningful on a `<text>` element, whose children it replaces.
+   */
+  markdown?: boolean;
 }
 
-export interface HandleAnnotation {
+export interface HandleAnnotation extends AnnotationBase {
   kind: 'handle';
   name?: string;
   /** Params driven by dragging this handle, in [x, y] order. */
@@ -39,19 +61,32 @@ export interface HandleAnnotation {
   max?: number;
 }
 
-export interface FillSlotAnnotation {
+export interface FillSlotAnnotation extends AnnotationBase {
   kind: 'fill_slot';
   name: string;
 }
 
-export interface AnchorAnnotation {
+export interface AnchorAnnotation extends AnnotationBase {
   kind: 'anchor';
   name: string;
 }
 
-export interface HitAreaAnnotation {
+export interface HitAreaAnnotation extends AnnotationBase {
   kind: 'hit_area';
   name?: string;
+}
+
+/**
+ * Attributes driven by the instance rather than fixed in the drawing: `{ "fill":
+ * "params.fill" }` paints the element with whatever the `fill` parameter says. Each value
+ * is a binding (see `bind.ts`); an attribute whose binding resolves to nothing keeps the
+ * value the drawing gave it, so a parameter left blank is a parameter that does not apply.
+ *
+ * This is what a `style()` script hook does, without the script.
+ */
+export interface StyleAnnotation extends AnnotationBase {
+  kind: 'style';
+  attrs: Record<string, string>;
 }
 
 export type Annotation =
@@ -60,7 +95,15 @@ export type Annotation =
   | HandleAnnotation
   | FillSlotAnnotation
   | AnchorAnnotation
-  | HitAreaAnnotation;
+  | HitAreaAnnotation
+  | StyleAnnotation;
+
+/**
+ * What an element means. One element may mean several things at once — a rectangle can be
+ * painted from a parameter *and* be connectable along its edge — so a list is allowed
+ * anywhere a single annotation is.
+ */
+export type AnnotationEntry = Annotation | Annotation[];
 
 export type ParamType = 'number' | 'string' | 'boolean' | 'color' | 'enum';
 
@@ -73,6 +116,11 @@ export interface ParamDef {
   max?: number;
   step?: number;
   options?: string[];
+  /**
+   * Kept out of the inspector. For values that are edited on the drawing itself — a
+   * markdown text block is typed into the canvas, not into a one-line param field.
+   */
+  hidden?: boolean;
 }
 
 export interface ComponentDef {
@@ -85,11 +133,24 @@ export interface ComponentDef {
   connector?: boolean;
   params: ParamDef[];
   geometry: { type: 'svg'; source: string };
-  annotations: Record<string, Annotation>;
+  annotations: Record<string, AnnotationEntry>;
   /** Relative path to the script inside the library, e.g. `scripts/box.js`. */
   script?: string;
   defaultSize?: { w: number; h: number };
   resizable?: boolean;
+  /**
+   * Contributes a point rather than a picture: a port, an anchor, a resize grip. Drawn in
+   * full while you are placing it, but when the component it was drawn into is compiled it
+   * keeps only what it annotates, and it never counts towards that component's extent.
+   */
+  marker?: boolean;
+  /**
+   * The drawing as a document, for components that are drawn rather than typed. Present
+   * exactly when the package has a `document.json`; `geometry` and `annotations` are then
+   * produced from it by the compiler (`core/library/compile.ts`) once the libraries the
+   * document draws from have loaded.
+   */
+  document?: unknown;
 }
 
 export interface LibraryManifest {
@@ -100,6 +161,11 @@ export interface LibraryManifest {
   /** Optional palette ordering hint; components are discovered by scanning. */
   components?: string[];
   shared?: string[];
+  /**
+   * Parts rather than finished components: offered while drawing a component, hidden on
+   * a sheet. `libs/meta` is the one that ships.
+   */
+  editorOnly?: boolean;
 }
 
 /**
