@@ -63,6 +63,21 @@ export function useController(controller: EditorController): number {
   return useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
 }
 
+/**
+ * A `<g>` filled from a markup string, rewritten only when that string actually changes.
+ *
+ * React assigns `innerHTML` unconditionally whenever the `dangerouslySetInnerHTML` prop is a
+ * different *object*, and an inline `{{ __html }}` literal is a new object on every render.
+ * That tore down and rebuilt every node's DOM on every render, which cost a full re-parse per
+ * drag frame and — because Chromium drops a pending click when the pressed element leaves the
+ * tree — meant no `click` or `dblclick` ever fired over a node. Memoising the prop keeps the
+ * DOM in place while the drawing is unchanged.
+ */
+function RawGroup({ markup, ...rest }: { markup: string } & React.SVGProps<SVGGElement>): JSX.Element {
+  const html = useMemo(() => ({ __html: markup }), [markup]);
+  return <g {...rest} dangerouslySetInnerHTML={html} />;
+}
+
 /** Unmodified keys that pick a tool, as the toolbar's tooltips promise. */
 const TOOL_KEYS: Record<string, ToolId> = { v: 'select', h: 'pan', c: 'connect' };
 
@@ -716,11 +731,11 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
           {graph.connectionOrder.map((id) => {
             const info = graph.connections.get(id)!;
             return (
-              <g
+              <RawGroup
                 key={id}
                 data-connection={id}
                 className={`connection${controller.selection.has(id) ? ' is-selected' : ''}`}
-                dangerouslySetInnerHTML={{ __html: connectionMarkup(info) }}
+                markup={connectionMarkup(info)}
               />
             );
           })}
@@ -730,12 +745,12 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
             if (info.node.hidden) return null;
             const editingHere = controller.editingLabel?.nodeId === id ? controller.editingLabel.elementId : null;
             return (
-              <g
+              <RawGroup
                 key={id}
                 data-node={id}
                 className={`node${controller.selection.has(id) ? ' is-selected' : ''}${controller.hoverId === id ? ' is-hover' : ''}`}
                 transform={nodeTransform(info)}
-                dangerouslySetInnerHTML={{ __html: nodeMarkup(info, editingHere) }}
+                markup={nodeMarkup(info, editingHere)}
               />
             );
           })}
