@@ -6,10 +6,13 @@ import { PageFrame } from './PageFrame';
 
 export function SheetEditor({
   controller,
+  fitKey,
   onEditComponent,
   onDeleteComponent,
 }: {
   controller: EditorController;
+  /** Changes when a different sheet is opened, which is what frames it. */
+  fitKey?: string;
   onEditComponent?: (entry: ComponentEntry) => void;
   onDeleteComponent?: (entry: ComponentEntry) => void;
 }): JSX.Element {
@@ -29,6 +32,7 @@ export function SheetEditor({
       <main className="canvas-area">
         <EditorSurface
           controller={controller}
+          fitKey={fitKey}
           underlay={
             doc.page ? (
               <PageFrame page={doc.page} meta={doc.meta} legend={doc.legend} registry={controller.registry} />

@@ -349,6 +349,7 @@ export function App(): JSX.Element {
       {mode === 'sheet' ? (
         <SheetEditor
           controller={controller}
+          fitKey={`${project.root}/${project.sheetPath}`}
           onEditComponent={editComponent}
           onDeleteComponent={(entry) => void deleteComponentFromPalette(entry)}
         />

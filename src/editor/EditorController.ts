@@ -147,6 +147,14 @@ export class EditorController {
    * **Fit** button cannot disagree about it.
    */
   fitMaxZoom = MAX_ZOOM;
+  /**
+   * What `fit` has already framed, so opening a drawing frames it exactly once.
+   *
+   * It lives here rather than on the surface because the surface is unmounted whenever the
+   * app switches to the component editor. Kept there, returning to the sheet would look
+   * like a fresh open and throw away the pan and zoom the user had left behind.
+   */
+  framedKey: unknown = undefined;
   selection = new Set<string>();
   hoverId: string | null = null;
   hoverPort: ResolvedPortInfo | null = null;

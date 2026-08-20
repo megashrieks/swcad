@@ -148,16 +148,16 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
   // engine has already laid out, so it happens a frame late rather than on the spot. The
   // live `viewSize` is read at that point; `size` is here only to retry once it lands.
   //
-  // The frame is never cancelled on teardown. `framed` is a ref, so it survives both the
-  // re-run that the first measurement causes and StrictMode's remount — cancelling would
-  // drop the only fit that was ever going to be scheduled. A frame that outlives the
-  // surface just re-centres a controller nothing is looking at.
-  const framed = useRef<unknown>(undefined);
+  // The frame is never cancelled on teardown. Whether a key has been framed is remembered
+  // on the controller, so it survives both the re-run that the first measurement causes
+  // and StrictMode's remount — cancelling would drop the only fit that was ever going to
+  // be scheduled. A frame that outlives the surface just re-centres a controller nothing
+  // is looking at.
   const fitFrame = useRef(0);
   useEffect(() => {
-    if (fitKey === undefined || fitKey === framed.current) return;
+    if (fitKey === undefined || fitKey === controller.framedKey) return;
     if (controller.viewSize.w <= 0 || controller.viewSize.h <= 0) return;
-    framed.current = fitKey;
+    controller.framedKey = fitKey;
     cancelAnimationFrame(fitFrame.current);
     fitFrame.current = requestAnimationFrame(() => {
       // Measured again here, not reused from above: opening a component can bring the
