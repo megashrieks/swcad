@@ -180,7 +180,12 @@ function ellipsePoint(o: Extract<Outline, { kind: 'ellipse' }>, t: number): { po
  * Which coordinate matters is decided by the way the port faces: one facing along x departs
  * horizontally and holds its y, so it is y that has to be on a lane. A diagonal facing holds
  * neither and takes whichever line is nearer. The move is capped at `SNAP_REACH` steps, as
- * on a straight run, and the normal is re-read at wherever the point ends up.
+ * on a straight run.
+ *
+ * A port that faces an axis also leaves along it. The surface normal at wherever the point
+ * slid to is a few degrees off, and a stub that followed it would step straight back off the
+ * lane the slide just put it on — which is the kink this is here to remove, moved along by
+ * one segment. Only a diagonal facing keeps the true normal, having no axis to hold.
  *
  * Solved rather than searched: an offset from the centre is `a·cos t + b·sin t` on either
  * axis, which is `R·cos(t − φ)`, so the parameters that put a coordinate on a given line are
@@ -206,6 +211,13 @@ function snapAlongEllipse(
   const fx = Math.abs(hit.facing.x);
   const fy = Math.abs(hit.facing.y);
   const axes: ('x' | 'y')[] = fx > fy + EPS ? ['y'] : fy > fx + EPS ? ['x'] : ['x', 'y'];
+  // Holding y means departing along x, and vice versa; a diagonal has nothing to hold.
+  const departure =
+    axes.length === 1
+      ? axes[0] === 'y'
+        ? { x: Math.sign(hit.facing.x), y: 0 }
+        : { x: 0, y: Math.sign(hit.facing.y) }
+      : null;
 
   let best: { pos: Vec; facing: Vec } | null = null;
   let bestDist = Infinity;
@@ -223,7 +235,7 @@ function snapAlongEllipse(
         const p = ellipsePoint(o, t);
         const d = Math.hypot(p.pos.x - hit.pos.x, p.pos.y - hit.pos.y);
         if (d > limit || d >= bestDist) continue;
-        best = p;
+        best = { pos: p.pos, facing: departure ?? p.facing };
         bestDist = d;
       }
     }
