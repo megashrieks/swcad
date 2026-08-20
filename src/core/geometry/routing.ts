@@ -11,11 +11,21 @@ export interface RouteEndpoint {
   facing?: Vec;
 }
 
+export interface RouteObstacle extends Rect {
+  /**
+   * This rect already carries the margin it wants, so the clearance ladder must not add
+   * more. Words are the case: a route passing a caption needs a hair of white space, not
+   * the room a solid shape asks for around it. Stacking both let a label repel a route it
+   * was nowhere near — a connector once bent four times to clear a caption by 0.05 units.
+   */
+  tight?: boolean;
+}
+
 export interface RouteOptions {
   style?: RouteStyle;
   /** How far the route leaves a port before turning. */
   stub?: number;
-  obstacles?: Rect[];
+  obstacles?: RouteObstacle[];
   /** Extra clearance around obstacles. */
   clearance?: number;
   waypoints?: Vec[];
@@ -439,7 +449,7 @@ function pinchedClearance(r: Rect, owners: (Rect | undefined)[], clearance: numb
 function stubGeometry(from: RouteEndpoint, to: RouteEndpoint, opts: RouteOptions, clearance: number): StubGeometry {
   const raw = opts.obstacles ?? [];
   const owners = [opts.fromOwnerBounds, opts.toOwnerBounds];
-  const obstacles = raw.map((r) => inflate(r, pinchedClearance(r, owners, clearance)));
+  const obstacles = raw.map((r) => inflate(r, r.tight ? 0 : pinchedClearance(r, owners, clearance)));
   // An owner is inflated by what is left over beside it, so its stub cannot be pushed into a
   // wall the obstacle pass has already agreed to stay out of. Obstacles it already touches say
   // nothing about the room around it and are ignored here.
@@ -524,6 +534,10 @@ function routeWithAStar(
           }
         : {}),
       bendPenalty: opts.bendPenalty ?? DEFAULT_BEND_PENALTY,
+      // Room already reserved around an obstacle is what "close" means, and a route only
+      // buys its way out of that band while the detour stays within a couple of percent.
+      crowdBand: clearance,
+      crowdPenalty: CROWD_PENALTY,
     });
 
   /*
@@ -665,6 +679,18 @@ function gridLattice(
 
 /** Corner cost for the A* router: about two grid steps, so it prefers straight over short. */
 const DEFAULT_BEND_PENALTY = 25;
+
+/**
+ * What a unit of travel alongside an obstacle costs on top of its length.
+ *
+ * A hair per unit: far too little to bend a route that has somewhere to be, far more than
+ * the float noise in a sum of segment lengths, so it decides only between routes that were
+ * otherwise a wash — and among those it takes the one with air around it. It has to stay
+ * this small for a second reason: the search's estimate does not know about crowding, so a
+ * larger charge is slack in the heuristic and the frontier widens to match. Twenty times
+ * this doubled the cost of dragging a node without changing a single route.
+ */
+const CROWD_PENALTY = 0.0001;
 
 function routeAtClearance(
   from: RouteEndpoint,

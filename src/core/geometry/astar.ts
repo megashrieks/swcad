@@ -1,4 +1,5 @@
 import type { Rect, Vec } from './index';
+import { inflate } from './index';
 
 /**
  * Orthogonal A* over a sparse routing lattice.
@@ -33,6 +34,18 @@ export interface AStarOptions {
   preferX?: number[];
   preferY?: number[];
   offLinePenalty?: number;
+  /**
+   * How far beyond its clearance an obstacle still pushes a route away, and what a unit of
+   * travel inside that band costs on top of its length.
+   *
+   * Clearance alone says only "not through here", so of two routes of equal length the
+   * search returned whichever it reached first — including one that traced a node's corner
+   * two units outside its clearance while the other ran through open space. The band is a
+   * preference rather than a rule: a route still hugs when hugging is the only way, and it
+   * gives way as soon as the detour costs more than the crowding.
+   */
+  crowdBand?: number;
+  crowdPenalty?: number;
 }
 
 /**
@@ -323,6 +336,28 @@ export function routeAStar(starts: AStarTerminal[], goals: AStarTerminal[], opts
   for (const node of startSeats.keys()) blocked[node] = 0;
   for (const node of goalSeats.keys()) blocked[node] = 0;
 
+  // Travel close to an obstacle is marked the same way, off the same rects grown by the
+  // band, so crowding costs nothing to look up while the route is being searched.
+  const crowd = Math.max(0, opts.crowdPenalty ?? 0);
+  const crowdBand = Math.max(0, opts.crowdBand ?? 0);
+  const crowdH = new Uint8Array(crowd > 0 && crowdBand > 0 ? nx * ny : 0);
+  const crowdV = new Uint8Array(crowdH.length);
+  if (crowdH.length > 0) {
+    for (const raw of obstacles) {
+      const r = inflate(raw, crowdBand);
+      const insideI = strictRange(xs, r.x, r.x + r.w);
+      const insideJ = strictRange(ys, r.y, r.y + r.h);
+      const spanI = spanRange(xs, r.x, r.x + r.w);
+      const spanJ = spanRange(ys, r.y, r.y + r.h);
+      for (let j = insideJ.lo; j <= insideJ.hi; j += 1) {
+        for (let i = spanI.lo; i <= spanI.hi; i += 1) crowdH[j * nx + i] = 1;
+      }
+      for (let i = insideI.lo; i <= insideI.hi; i += 1) {
+        for (let j = spanJ.lo; j <= spanJ.hi; j += 1) crowdV[j * nx + i] = 1;
+      }
+    }
+  }
+
   /** Exact test used only for the handful of edges touching an endpoint. */
   const endpointEdgeOpen = (a: Vec, b: Vec, from: number, to: number): boolean => {
     const exempt = [startSeats.get(from), startSeats.get(to), goalSeats.get(from), goalSeats.get(to)];
@@ -426,6 +461,10 @@ export function routeAStar(starts: AStarTerminal[], goals: AStarTerminal[], opts
         if (edge) return;
       }
       let step = nextAxis === 'h' ? Math.abs(there.x - here.x) : Math.abs(there.y - here.y);
+      if (crowdH.length > 0) {
+        const near = nextAxis === 'h' ? crowdH[j * nx + Math.min(i, ni)] : crowdV[Math.min(j, nj) * nx + i];
+        if (near) step += step * crowd;
+      }
       if (nextAxis !== axis) step += bend;
       if (arriving) {
         const wanted = arriving.terminal.axis ?? null;

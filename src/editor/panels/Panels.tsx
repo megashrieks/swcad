@@ -10,6 +10,7 @@ import {
   TrashIcon,
 } from '@radix-ui/react-icons';
 import type { ComponentEntry } from '@core/library/registry';
+import { polylineLength } from '@core/geometry/index';
 import type { Node, ParamDef } from '@core/model/types';
 import { PAGE_PRESETS, makePage } from '@core/model/types';
 import type { EditorController } from '../EditorController';
@@ -322,6 +323,7 @@ export function InspectorPanel({
         <div className="row-note">
           {describeEndpoint(conn.conn.from)} → {describeEndpoint(conn.conn.to)}
         </div>
+        <div className="row-note">Length {formatLength(polylineLength(conn.points))}</div>
         {conn.error && <p className="error">{conn.error}</p>}
         {conn.warning && <p className="warning">{conn.warning}</p>}
       </Panel>
@@ -926,4 +928,9 @@ function describeEndpoint(ep: { kind: string; nodeId?: string; portId?: string; 
 
 function round(v: number): number {
   return Math.round(v * 100) / 100;
+}
+
+/** Route length, to the tenth of a unit — enough to compare two routes, never a wall of digits. */
+function formatLength(v: number): string {
+  return v.toFixed(1).replace(/\.0$/, '');
 }

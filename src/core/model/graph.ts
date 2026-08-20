@@ -2,7 +2,7 @@ import type { Rect, Transform, Vec } from '../geometry/index';
 import * as geometryApi from '../geometry/index';
 import { boundsOf, inflate, rect, rectContains, rectIntersects, rectUnion, toWorld, transformedBounds, rotate, norm } from '../geometry/index';
 import { arrowHead, arrowHeadDepth, route as routeBetween, routeOrthogonalBest } from '../geometry/routing';
-import type { RouteEndpoint } from '../geometry/routing';
+import type { RouteEndpoint, RouteObstacle } from '../geometry/routing';
 import {
   isClosedOutline,
   outlineAttach,
@@ -1221,7 +1221,7 @@ export class GraphEngine {
     const fromOwnerBounds = ownerPart(conn.from, fromRaw.portId);
     const toOwnerBounds = ownerPart(conn.to, toRaw.portId);
 
-    const obstacles: Rect[] = [];
+    const obstacles: RouteObstacle[] = [];
     if (avoid) {
       /*
        * What the router is allowed to know about.
@@ -1260,7 +1260,7 @@ export class GraphEngine {
            * label is its own rect, the port is not inside it, so it keeps blocking.
            */
           for (const box of Object.values(info.labelBoxes)) {
-            if (box.w > 0 && box.h > 0) obstacles.push(inflate(box, LABEL_GUARD));
+            if (box.w > 0 && box.h > 0) obstacles.push({ ...inflate(box, LABEL_GUARD), tight: true });
           }
           const wider = rectUnion(region, inflate(info.bounds, ROUTE_QUERY_MARGIN));
           if (wider.w > region.w + 1e-6 || wider.h > region.h + 1e-6) {
@@ -1287,7 +1287,7 @@ export class GraphEngine {
       for (const other of done.values()) {
         if (other.id === conn.id) continue;
         for (const box of other.labelBoxes) {
-          if (rectIntersects(region, box)) obstacles.push(inflate(box, LABEL_GUARD));
+          if (rectIntersects(region, box)) obstacles.push({ ...inflate(box, LABEL_GUARD), tight: true });
         }
       }
     }

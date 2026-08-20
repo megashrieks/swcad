@@ -125,6 +125,10 @@ than holding a column of its own. Selecting is the most ordinary thing you can d
 it must not resize the canvas underneath the pointer: a pane that came and went would re-frame the
 drawing mid-gesture and move whatever you were about to click on next.
 
+A selected connector also reports the **length of the route as drawn**, under its two endpoints.
+It is the one property of a connector nothing else can tell you: the path is chosen by the router,
+so the only way to see what a change to the layout cost is to read it off.
+
 ### Editing several items at once
 
 With more than one item selected the Inspector stops describing any single part and shows the
@@ -169,6 +173,14 @@ connector anywhere on its circumference and a rectangle accepts one anywhere alo
 end point is not fixed: it is the crossing of the shape's edge with the line towards the other
 endpoint (or the nearest waypoint), together with the outward normal there — so it slides round the
 edge as the other end moves, and the router still leaves along a sensible direction.
+
+Where an avoiding route may meet such a port is a separate question, answered by the grid rather
+than by aiming: a connector on a snapped sheet only travels along lanes, so the spots it can leave
+from are exactly the places the shape **crosses a grid line**, and those are solved for directly —
+a crossing of a column is left vertically, of a row horizontally. The router prices every spot
+against the whole connector and takes the shortest, which is why a big ring offers more places to
+land than a small one and why two mirrored nodes get mirrored connectors. With snapping off there
+are no lines to cross, so the shape is sampled by direction instead.
 
 `base/box` and `base/circle` keep their four compass ports *and* expose their body outline as an
 `edge` port. Hit-testing prefers a compass port wherever the two coincide, and an outline port is
@@ -336,7 +348,10 @@ sits inside, or it could never arrive — and for a component whose port is draw
 outline that is the entire node, which is how an arrow ended up landing across the very name it
 was pointing at. Each label is therefore handed over as a rect in its own right, with a few
 pixels of padding: the port is not inside it, so it goes on blocking while the node around it
-stands aside.
+stands aside. That padding is all a caption gets — the clearance below is not added on top of
+it, since a line passing a word needs a hair of white space, not the room a solid shape asks
+for. Stacking the two let a caption repel a route it was nowhere near: a connector once bent
+four times to clear a label by five hundredths of a unit.
 
 Which nodes count as "nearby" is not a fixed radius. The search starts from a band around the
 straight line between the two ports, and then **grows to include whatever it finds**: every
@@ -364,6 +379,16 @@ walls from end to end.
 Clearance is then tried in a ladder (full, half, quarter, none) so tightly packed nodes still
 get a legal path, and the old candidate-shape search remains as a fallback for endpoints that
 are genuinely walled in. Set the arrow's `Router` param to `simple` to force that engine.
+
+Clearance says only "not through here", so of two routes of the same length the search used to
+return whichever it happened to reach first — including one that traced a node's corner two
+units outside its clearance while the other ran through open space. Travel alongside an
+obstacle therefore costs a **hair more than its length**, within a band as wide as the
+clearance again. It is far too small to bend a route that has somewhere to be, so it decides
+only between routes that were otherwise a wash, and among those it takes the one with air
+around it. It has to stay that small for a second reason: the search's estimate knows nothing
+about crowding, so a larger charge is slack in the heuristic, and twenty times this value
+doubled the cost of dragging a node without changing a single route.
 
 The search never sees the stub segments — they run from the port to the first lattice node, and
 from a surface port that segment is a diagonal — and it lets an endpoint escape whatever it
