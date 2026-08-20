@@ -71,7 +71,14 @@ defineComponent({
       var halfH = ink.height / 2 + 2;
       var total = geometry.polylineLength(drawn);
       labelAt = labelSpot(drawn, total, halfW * 2);
-      var box = { x: labelAt.x - halfW, y: labelAt.y - halfH, w: halfW * 2, h: halfH * 2 };
+      // Written across a vertical run, a caption is as wide as the words and reaches half
+      // of that to either side - far enough, on a fan of connectors leaving one port, to
+      // cover the lanes its neighbours need, which sends them the long way round for the
+      // sake of a few units. Turned to read along the run it takes the width of a line of
+      // text instead, and only ever occupies the lane it is already on.
+      var box = labelAt.vertical
+        ? { x: labelAt.x - halfH, y: labelAt.y - halfW, w: halfH * 2, h: halfW * 2 }
+        : { x: labelAt.x - halfW, y: labelAt.y - halfH, w: halfW * 2, h: halfH * 2 };
       // The gap is the run of the line that is actually behind the words, measured rather
       // than estimated from the direction at the middle: a route that turns a corner under
       // its own label is inside the box twice over, and an estimate cuts only one of them.
@@ -128,10 +135,19 @@ defineComponent({
       );
     }
     if (labelAt) {
+      // The baseline sits a third of a line below the centre of the letters, so the anchor
+      // is pushed that way to leave the words centred on the line - across the run when the
+      // caption is written along it, which after the turn is the reading direction's own
+      // "down".
+      var ax = labelAt.x + (labelAt.vertical ? labelSize * 0.35 : 0);
+      var ay = labelAt.y + (labelAt.vertical ? 0 : labelSize * 0.35);
       children.push(
         svg.text(label, {
-          x: labelAt.x,
-          y: labelAt.y + labelSize * 0.35,
+          x: ax,
+          y: ay,
+          // Anticlockwise, so the words read bottom to top: the same way round as the
+          // vertical axis of a chart, and the only one of the two that is not upside down.
+          transform: labelAt.vertical ? 'rotate(-90 ' + round2(ax) + ' ' + round2(ay) + ')' : null,
           'text-anchor': 'middle',
           'font-size': labelSize,
           'font-family': 'Inter, Segoe UI, sans-serif',
@@ -175,7 +191,28 @@ function labelSpot(points, total, need) {
     }
     at += len;
   }
-  return geometry.pointAtLength(points, best ? best.at : total / 2);
+  var where = best ? best.at : total / 2;
+  var pt = geometry.pointAtLength(points, where);
+  return { x: pt.x, y: pt.y, vertical: runIsVertical(points, where) };
+}
+
+/** Does the run holding the caption fall more down the sheet than across it? */
+function runIsVertical(points, at) {
+  var walked = 0;
+  for (var i = 1; i < points.length; i += 1) {
+    var a = points[i - 1];
+    var b = points[i];
+    var len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (at <= walked + len || i === points.length - 1) {
+      return Math.abs(b.y - a.y) > Math.abs(b.x - a.x);
+    }
+    walked += len;
+  }
+  return false;
+}
+
+function round2(v) {
+  return Math.round(v * 100) / 100;
 }
 
 /** The stretch of the polyline, in arc length, that lies inside `box`. */

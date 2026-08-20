@@ -25,6 +25,7 @@ import {
   sanitize,
   scaleGeometry,
   svgBuilder,
+  transformedByAttr,
   treeBounds,
   walk,
   type ElementPart,
@@ -363,7 +364,10 @@ export function labelBounds(
   const baseline = numAttr(element.attrs.y, 0) + baselineShift(attrs, font.size);
   const anchor = attrs['text-anchor'];
   const left = anchor === 'middle' ? x - w / 2 : anchor === 'end' ? x - w : x;
-  return rect(left, baseline - font.size, w, h);
+  // The element's own transform, not the inherited one: a caption written along a vertical
+  // run is turned on the spot, and a box left lying flat would block its neighbours' lanes
+  // with space the words do not occupy.
+  return transformedByAttr(rect(left, baseline - font.size, w, h), element.attrs.transform);
 }
 
 /** The font a `<text>` draws with, from its own and its ancestors' presentation attributes. */
@@ -903,9 +907,13 @@ export class GraphEngine {
       linkPortGroups(resolved);
       let localBox = boundsWithText(resolved.vnodes, new Set(labelLocal.keys()));
       // A bound label draws its *value*, which is rarely the sample text sitting in the
-      // shape, so the box the graph measured for it is the one that counts.
+      // shape, so the box the graph measured for it is the one that counts. A caption set
+      // to nothing keeps its line height and loses its width, and a sliver of pure height
+      // is not something the component occupies - counting it stretched the node's bounds
+      // (and so the rect a route treats as solid) down past the drawing, by an amount that
+      // depended on where the caption would have sat rather than on anything visible.
       for (const box of labelLocal.values()) {
-        if (box.w > 0 || box.h > 0) localBox = rectUnion(localBox, box);
+        if (box.w > 0 && box.h > 0) localBox = rectUnion(localBox, box);
       }
       resolved.localBounds = localBox;
       resolved.bounds = transformedBounds(resolved.effective, localBox);
@@ -1649,7 +1657,18 @@ function collectFromScript(
 ): void {
   for (const [elId, ann] of resolveAnnotations(def, resolved.node.params)) {
     const element = findById(resolved.vnodes, elId);
-    if (!element) continue;
+    if (!element) {
+      // The static pass measured the component's own placeholder for this annotation. A
+      // script that drew no element for it drew no caption, so that measurement describes
+      // nothing on the sheet - it is dropped rather than left standing where the shipped
+      // artwork happened to put it.
+      if (ann.kind === 'label') {
+        labelLocal.delete(elId);
+        delete resolved.labelBoxes[elId];
+        delete resolved.labelNodes[elId];
+      }
+      continue;
+    }
     const point = elementPoint(element);
     if (ann.kind === 'port') {
       const idx = resolved.ports.findIndex((p) => p.id === elId);

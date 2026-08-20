@@ -90,8 +90,6 @@ defineComponent({
 
     // The hit box hugs the drawn content rather than the whole instance box, so
     // selecting, grabbing and routing all treat the symbol as the size it looks.
-    // It hangs from the node's origin: the instance box is not editable, so the
-    // two corners agree until the caption or the icon size changes it.
     //
     // A glyph sized by hand is not clipped back to the instance box - the number
     // is the promise, and honouring it only sometimes would put two symbols set
@@ -100,10 +98,25 @@ defineComponent({
     var naturalH = contentH + pad * 2;
     var boxW = iconSize > 0 ? naturalW : Math.min(w, naturalW);
     var boxH = iconSize > 0 ? naturalH : Math.min(h, naturalH);
-    var boxX = 0;
-    var boxY = 0;
+
+    // The symbol hangs from its port ring, not from a corner: the node's origin
+    // is the centre of the ring, so everything else is placed around it.
+    //
+    // A corner origin puts the port at `origin + boxW / 2`, and half a hugged
+    // box is whatever the caption made it - so a node dropped exactly on the
+    // grid still had an off-grid port. On a snapped sheet a connector may only
+    // travel along the lattice, and the lattice is only symmetric about a line
+    // that lies on it, so two symbols placed as mirror images routed to
+    // different lengths: their ports sat at the same offset from a grid line
+    // instead of opposite ones. Hanging from the ring makes the port inherit
+    // the node's own snap, which the editor already keeps on the grid, and it
+    // makes equally spaced nodes have equally spaced ports whatever their
+    // captions say.
+    var innerTop = (boxH - contentH) / 2;
+    var boxX = -boxW / 2;
+    var boxY = glyph > 0 ? -(innerTop + glyph / 2) : -boxH / 2;
     var mid = boxX + boxW / 2;
-    var top = boxY + (boxH - contentH) / 2;
+    var top = boxY + innerTop;
 
     // No body: these are symbols on the sheet, not cards. The rect is only a hit
     // area, kept invisible, so the content can still be grabbed anywhere inside

@@ -666,8 +666,16 @@ const applyMatrix = (m: [number, number, number, number, number, number], p: Vec
 
 /** Local-space bounds of an element (approximate for curves), including its own `transform`. */
 export function elementBounds(node: VNode): Rect {
-  const box = untransformedBounds(node);
-  const m = transformMatrix(node.attrs.transform);
+  return transformedByAttr(untransformedBounds(node), node.attrs.transform);
+}
+
+/**
+ * A local-space box mapped through an element's own `transform`, as an axis-aligned box.
+ * Exported because `<text>` is measured elsewhere — from its font and content rather than
+ * from its attributes — and that measurement has to be turned the same way the glyphs are.
+ */
+export function transformedByAttr(box: Rect, transform: string | undefined): Rect {
+  const m = transformMatrix(transform);
   if (!m) return box;
   return boundsOf([
     { x: box.x, y: box.y },

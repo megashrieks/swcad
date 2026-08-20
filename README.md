@@ -258,6 +258,15 @@ icons whenever their labels were different lengths. `Icon size` says the number 
 box follows it. `0` means "take it from the instance box", which is how sheets drawn before the
 parameter existed are still measured.
 
+The symbol also hangs from its **port ring**, not from a corner: the node's origin is the centre
+of the circle a connector lands on. A corner origin put the port at `origin + boxW / 2`, and half
+a hugged box is whatever the caption made it — so a symbol dropped exactly on the grid still had
+an off-grid port. That matters because a snapped route may only travel along the lattice, and the
+lattice is only symmetric about a line that lies on it: two symbols placed as mirror images routed
+to visibly different lengths, their ports sitting at the *same* offset from a grid line instead of
+opposite ones. Hanging from the ring makes the port inherit the node's own snap, and makes equally
+spaced symbols have equally spaced ports whatever their captions say.
+
 ## Theming
 
 The chrome is built on a vendored subset of **`@pomavo/ui`** in `src/ui/pomavo/` — shadcn-style
@@ -365,6 +374,21 @@ stands aside. That padding is all a caption gets — the clearance below is not 
 it, since a line passing a word needs a hair of white space, not the room a solid shape asks
 for. Stacking the two let a caption repel a route it was nowhere near: a connector once bent
 four times to clear a label by five hundredths of a unit.
+
+A caption that says nothing occupies nothing. An empty string still has a line height, and a
+sliver of pure height was enough to stretch the node's bounds — the rect a route treats as
+solid — well past the drawing, in a direction fixed by wherever the caption would have sat.
+Two mirrored symbols were both stretched the *same* way rather than opposite ways, so their
+routes came out different lengths. A label with no width is now no obstacle, and a label whose
+component drew no element for it at all is dropped rather than left where the shipped artwork
+happened to put it.
+
+**A caption on a vertical run reads along the line.** It is cut out of its own connector either
+way, so a horizontal word across a vertical run removed a few units of line and blocked eighty
+units of everything else: its box lay across the lanes to both sides, and a neighbouring
+connector that wanted one of them had to stagger around a word it never touched. Turned
+anticlockwise, the caption covers its own lane and the length of line it hides matches what a
+horizontal caption has always hidden on a horizontal run.
 
 Which nodes count as "nearby" is not a fixed radius. The search starts from a band around the
 straight line between the two ports, and then **grows to include whatever it finds**: every
