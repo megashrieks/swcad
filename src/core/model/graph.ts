@@ -98,7 +98,18 @@ function attachCandidates(ep: Attach, settle: (ep: Attach, toward: Vec) => Attac
   for (let i = 0; i < ATTACH_SAMPLES; i += 1) {
     const a = (i / ATTACH_SAMPLES) * Math.PI * 2;
     const hit = settle(ep, { x: c.x + Math.cos(a) * reach, y: c.y + Math.sin(a) * reach });
-    if (out.some((p) => Math.hypot(p.pos.x - hit.pos.x, p.pos.y - hit.pos.y) < 1e-6)) continue;
+    // Pulling a point onto the grid lands neighbouring directions on the same spot, but they
+    // are not the same offer: one leaves along an axis, the other on the shape's own normal,
+    // and they route to different lengths. Keeping only the first the sweep reached made a
+    // ring offer a diagonal approach at two of its quadrant corners and a square one at the
+    // others, so mirrored connectors arrived differently. Both are kept, and the router picks
+    // whichever gives the shorter connector.
+    const dup = out.some(
+      (p) =>
+        Math.hypot(p.pos.x - hit.pos.x, p.pos.y - hit.pos.y) < 1e-6 &&
+        Math.hypot(p.facing.x - hit.facing.x, p.facing.y - hit.facing.y) < 1e-6,
+    );
+    if (dup) continue;
     out.push(hit);
   }
   return out.length > 0 ? out : [ep];
@@ -1348,8 +1359,6 @@ export class GraphEngine {
         to = pick(toAttach, toEnds, tail.to);
       } else {
         const best = routeOrthogonalBest(fromEnds, toEnds, routeOpts);
-        const trace = (globalThis as unknown as { __swTrace?: unknown[] }).__swTrace;
-        if (trace) trace.push({ id: conn.id, obstacles, fromEnds, toEnds, routeOpts: { ...routeOpts, obstacles: undefined }, best });
         from = pick(fromAttach, fromEnds, best.from);
         to = pick(toAttach, toEnds, best.to);
       }

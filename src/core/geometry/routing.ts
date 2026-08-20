@@ -498,6 +498,11 @@ function routeWithAStar(
     point: stubOf.get(ep)!,
     axis: axisOf(ep.facing),
     dir: ep.facing,
+    // What this spot costs before the search starts travelling: the stub that reaches it.
+    // Candidates on one shape differ here — a diagonal lead-in off a ring is longer than a
+    // square one — so charging it is what makes the search pick the shortest whole
+    // connector rather than the shortest lattice path.
+    cost: dist(ep.pos, stubOf.get(ep)!),
   });
   const search = (from: RouteEndpoint[], to: RouteEndpoint[]) =>
     routeAStar(from.map(terminal), to.map(terminal), {
