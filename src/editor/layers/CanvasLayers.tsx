@@ -228,19 +228,17 @@ export function HighlightLayer({
       ctx.stroke();
     };
 
-    // Secondaries drawn first (faint context), primaries last so the snapped guide sits on top.
+    // Secondaries drawn first (faint context), then the lines the geometry actually landed on:
+    // a soft halo under a brighter dashed line, so a hit reads instantly against the near-misses.
+    const hits = lines.filter((l) => l.primary);
     strokeLines(
       lines.filter((l) => !l.primary),
       guideWeakColor,
       1,
       false,
     );
-    strokeLines(
-      lines.filter((l) => l.primary),
-      guideColor,
-      1.5,
-      true,
-    );
+    strokeLines(hits, guideWeakColor, 3, false);
+    strokeLines(hits, guideColor, 1.5, true);
     ctx.setLineDash([]);
   }, [tx, ty, zoom, w, h, guides, active, guideColor, guideWeakColor]);
 

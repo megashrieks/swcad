@@ -21,6 +21,7 @@ export interface Guide {
   axis: 'x' | 'y';
   coord: number;
   sources: string[];
+  /** `primary` once the moving geometry sits on the line; `secondary` while it is only near it. */
   strength: 'primary' | 'secondary';
 }
 
@@ -54,6 +55,8 @@ const SNAP_TOLERANCE_PX = 7;
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 8;
 const GUIDE_CAP_PER_AXIS = 64;
+/** Coordinates are indexed to a thousandth of a unit; anything closer than this is "on the line". */
+const ALIGN_EPSILON = 1e-2;
 const CLIPBOARD_KIND = 'swcad/clipboard';
 
 export interface ClipboardPayload {
@@ -503,11 +506,17 @@ export class EditorController {
       x = choiceX.value;
       y = choiceY.value;
 
+      // A guide is "hit" when the geometry actually lands on it, not merely when it won the
+      // snap: one shift can satisfy several coordinates at once (equal-width neighbours line
+      // up their left edges and their centres together), and every one of those deserves the
+      // strong line.
+      const shiftX = x - world.x;
+      const shiftY = y - world.y;
       for (const c of candidatesX) {
-        guides.push({ axis: 'x', coord: c.coord, sources: c.sources, strength: c.coord === choiceX.primaryCoord ? 'primary' : 'secondary' });
+        guides.push({ axis: 'x', coord: c.coord, sources: c.sources, strength: landsOn(c, shiftX) ? 'primary' : 'secondary' });
       }
       for (const c of candidatesY) {
-        guides.push({ axis: 'y', coord: c.coord, sources: c.sources, strength: c.coord === choiceY.primaryCoord ? 'primary' : 'secondary' });
+        guides.push({ axis: 'y', coord: c.coord, sources: c.sources, strength: landsOn(c, shiftY) ? 'primary' : 'secondary' });
       }
     } else if (gridActive) {
       x = snapTo(world.x, step, doc.grid.origin.x);
@@ -883,6 +892,8 @@ interface GuideCandidate {
   coord: number;
   sources: string[];
   delta: number;
+  /** Probe values that found this coordinate, so alignment can be re-checked after snapping. */
+  probes: number[];
 }
 
 function gatherGuideCandidates(
@@ -891,22 +902,28 @@ function gatherGuideCandidates(
   exclude: ReadonlySet<string>,
   query: (probe: number, tolerance: number, exclude: ReadonlySet<string>) => { coord: number; sources: string[]; delta: number }[],
 ): GuideCandidate[] {
-  const byCoord = new Map<number, { sources: Set<string>; delta: number }>();
+  const byCoord = new Map<number, { sources: Set<string>; delta: number; probes: number[] }>();
   for (const probe of probes) {
     for (const hit of query(probe, tolerance, exclude)) {
       const existing = byCoord.get(hit.coord);
       if (existing) {
         for (const source of hit.sources) existing.sources.add(source);
+        existing.probes.push(probe);
         if (Math.abs(hit.delta) < Math.abs(existing.delta)) existing.delta = hit.delta;
       } else {
-        byCoord.set(hit.coord, { sources: new Set(hit.sources), delta: hit.delta });
+        byCoord.set(hit.coord, { sources: new Set(hit.sources), delta: hit.delta, probes: [probe] });
       }
     }
   }
   return [...byCoord.entries()]
-    .map(([coord, v]) => ({ coord, sources: [...v.sources], delta: v.delta }))
+    .map(([coord, v]) => ({ coord, sources: [...v.sources], delta: v.delta, probes: v.probes }))
     .sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta))
     .slice(0, GUIDE_CAP_PER_AXIS);
+}
+
+/** True when one of the candidate's probes lands exactly on its coordinate after `shift`. */
+function landsOn(candidate: GuideCandidate, shift: number): boolean {
+  return candidate.probes.some((p) => Math.abs(p + shift - candidate.coord) <= ALIGN_EPSILON);
 }
 
 export interface AxisSnapChoice {
