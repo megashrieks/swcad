@@ -1,0 +1,8 @@
+// External API: the shared chassis, drawn with the 'webhook' glyph.
+var chassis = require('lib:chassis');
+
+defineComponent({
+  render: function (ctx) {
+    return chassis.render(ctx, 'webhook');
+  },
+});

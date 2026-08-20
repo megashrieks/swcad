@@ -1,0 +1,66 @@
+{
+  "id": "web-app",
+  "name": "Web app",
+  "version": "1.0.0",
+  "category": "clients",
+  "description": "Browser front end.",
+  "resizable": true,
+  "defaultSize": {
+    "w": 150,
+    "h": 110
+  },
+  "params": [
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Title",
+      "default": "Web app"
+    },
+    {
+      "name": "subtitle",
+      "type": "string",
+      "label": "Subtitle",
+      "default": ""
+    },
+    {
+      "name": "accent",
+      "type": "color",
+      "label": "Icon",
+      "default": "var(--sw-accent)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "iconStroke",
+      "type": "number",
+      "label": "Icon weight",
+      "default": 1.8,
+      "min": 0.2,
+      "step": 0.1
+    },
+    {
+      "name": "showIcon",
+      "type": "boolean",
+      "label": "Show icon",
+      "default": true
+    },
+    {
+      "name": "portSize",
+      "type": "number",
+      "label": "Port size",
+      "default": 3.5,
+      "min": 0
+    }
+  ]
+}

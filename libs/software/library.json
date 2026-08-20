@@ -1,0 +1,32 @@
+{
+  "id": "software",
+  "name": "Software",
+  "version": "1.0.0",
+  "description": "Software architecture symbols - clients, services, data stores and platform pieces. Each is an icon with a label and four ports; there is no drawn body, so put a box behind one if a container is wanted.",
+  "components": [
+    "components/user",
+    "components/web-app",
+    "components/mobile-app",
+    "components/api-gateway",
+    "components/load-balancer",
+    "components/cdn",
+    "components/firewall",
+    "components/service",
+    "components/worker",
+    "components/server",
+    "components/database",
+    "components/cache",
+    "components/queue",
+    "components/event-bus",
+    "components/object-store",
+    "components/search",
+    "components/auth",
+    "components/analytics",
+    "components/external-api",
+    "components/cloud"
+  ],
+  "shared": [
+    "shared/icons.js",
+    "shared/chassis.js"
+  ]
+}

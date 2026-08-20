@@ -1,0 +1,53 @@
+{
+  "body": {
+    "kind": "hit_area"
+  },
+  "title": {
+    "kind": "label",
+    "bind": "params.title",
+    "align": "center",
+    "editable": true
+  },
+  "subtitle": {
+    "kind": "label",
+    "bind": "params.subtitle",
+    "align": "center",
+    "editable": true
+  },
+  "p-n": {
+    "kind": "port",
+    "name": "north",
+    "direction": "inout",
+    "facing": [
+      0,
+      -1
+    ]
+  },
+  "p-e": {
+    "kind": "port",
+    "name": "east",
+    "direction": "inout",
+    "facing": [
+      1,
+      0
+    ]
+  },
+  "p-s": {
+    "kind": "port",
+    "name": "south",
+    "direction": "inout",
+    "facing": [
+      0,
+      1
+    ]
+  },
+  "p-w": {
+    "kind": "port",
+    "name": "west",
+    "direction": "inout",
+    "facing": [
+      -1,
+      0
+    ]
+  }
+}
