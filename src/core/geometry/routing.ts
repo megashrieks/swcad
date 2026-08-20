@@ -1,5 +1,6 @@
 import type { Rect, Vec } from './index';
 import { clamp, dist, inflate, rectContains, rectFromPoints, rectIntersects, rectUnion } from './index';
+import type { AStarTerminal } from './astar';
 import { axisOf, routeAStar } from './astar';
 
 export type RouteStyle = 'straight' | 'orthogonal' | 'curve';
@@ -488,14 +489,18 @@ function routeWithAStar(
   mode: 'grid' | 'lanes',
 ): RouteChoice | null {
   const geo = stubGeometry(fromList[0], toList[0], opts, clearance);
-  const fromStubs = fromList.map((ep) => stubAt(ep, geo.fromOwner, opts, geo.obstacles));
-  const toStubs = toList.map((ep) => stubAt(ep, geo.toOwner, opts, geo.obstacles));
+  const stubOf = new Map<RouteEndpoint, Vec>();
+  for (const ep of fromList) stubOf.set(ep, stubAt(ep, geo.fromOwner, opts, geo.obstacles));
+  for (const ep of toList) stubOf.set(ep, stubAt(ep, geo.toOwner, opts, geo.obstacles));
   const grid = mode === 'grid' ? gridLattice(geo, geo.obstacles, opts) : null;
   if (mode === 'grid' && !grid) return null;
-  const found = routeAStar(
-    fromList.map((ep, i) => ({ point: fromStubs[i], axis: axisOf(ep.facing), dir: ep.facing })),
-    toList.map((ep, i) => ({ point: toStubs[i], axis: axisOf(ep.facing), dir: ep.facing })),
-    {
+  const terminal = (ep: RouteEndpoint): AStarTerminal => ({
+    point: stubOf.get(ep)!,
+    axis: axisOf(ep.facing),
+    dir: ep.facing,
+  });
+  const search = (from: RouteEndpoint[], to: RouteEndpoint[]) =>
+    routeAStar(from.map(terminal), to.map(terminal), {
       obstacles: geo.obstacles,
       // Lines through the ports themselves and a mid lane, so the classic centre-split
       // Z-route is always available even when no obstacle happens to sit on that line.
@@ -514,14 +519,39 @@ function routeWithAStar(
           }
         : {}),
       bendPenalty: opts.bendPenalty ?? DEFAULT_BEND_PENALTY,
-    },
-  );
-  if (!found) return null;
-  const from = fromList[found.startIndex];
-  const to = toList[found.goalIndex];
-  const full = simplify([from.pos, ...found.points, to.pos]);
-  if (!stubsAreClean(full, opts.obstacles ?? [], from.pos, to.pos)) return null;
-  return { points: full, from, to };
+    });
+
+  /*
+   * The stubs are the one part of the route the search never sees: they run from the port
+   * to the first lattice node, and for a surface port that segment is a diagonal across
+   * whatever happens to lie beside the shape — very often the node's own caption.
+   *
+   * Failing the whole attempt on that used to throw away the search as well as the spot it
+   * chose, and the fallback below picks no spot at all: it routes to whichever candidate
+   * the caller happened to list first, which is an arbitrary point on the shape and reads
+   * as the connector going the long way round. A dirty stub is a verdict on that candidate,
+   * not on the sheet, so the candidate is dropped and the search repeated — the runner-up
+   * is then the cheapest of what is left, which is the answer we wanted all along.
+   */
+  const raw = opts.obstacles ?? [];
+  let fromLeft = fromList;
+  let toLeft = toList;
+  for (;;) {
+    const found = search(fromLeft, toLeft);
+    if (!found) return null;
+    const from = fromLeft[found.startIndex];
+    const to = toLeft[found.goalIndex];
+    const full = simplify([from.pos, ...found.points, to.pos]);
+    const dirty = dirtySegments(full, raw, from.pos, to.pos);
+    if (dirty.length === 0) return { points: full, from, to };
+    // Anything dirty away from the ends is the route itself hitting something, which no
+    // other candidate can mend.
+    const last = full.length - 1;
+    if (dirty.some((i) => i !== 1 && i !== last)) return null;
+    if (dirty.includes(last) && toLeft.length > 1) toLeft = toLeft.filter((ep) => ep !== to);
+    else if (dirty.includes(1) && fromLeft.length > 1) fromLeft = fromLeft.filter((ep) => ep !== from);
+    else return null;
+  }
 }
 
 /**
@@ -535,16 +565,21 @@ function routeWithAStar(
  * a surface port that segment is a diagonal.
  *
  * So the whole path, stubs included, is re-checked against the *raw* obstacles, exempting only
- * the ones an endpoint is really inside. A failure sends the caller down to the next clearance.
+ * the ones an endpoint is really inside. Which segments failed is what the caller acts on: a
+ * dirty stub condemns the attach point it belongs to, a dirty middle condemns the route.
  */
-function stubsAreClean(points: Vec[], raw: Rect[], a: Vec, b: Vec): boolean {
-  for (const r of raw) {
-    if (insideStrict(r, a) || insideStrict(r, b)) continue;
-    for (let i = 1; i < points.length; i += 1) {
-      if (segmentEntersInterior(points[i - 1], points[i], r)) return false;
+function dirtySegments(points: Vec[], raw: Rect[], a: Vec, b: Vec): number[] {
+  const out: number[] = [];
+  for (let i = 1; i < points.length; i += 1) {
+    for (const r of raw) {
+      if (insideStrict(r, a) || insideStrict(r, b)) continue;
+      if (segmentEntersInterior(points[i - 1], points[i], r)) {
+        out.push(i);
+        break;
+      }
     }
   }
-  return true;
+  return out;
 }
 
 function insideStrict(r: Rect, p: Vec): boolean {

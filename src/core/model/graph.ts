@@ -1325,8 +1325,8 @@ export class GraphEngine {
         ...routingGridOf(doc.grid),
       };
 
-      const fromAttach = fromSlides ? attachCandidates(fromRaw, settle) : [from0];
-      const toAttach = toSlides ? attachCandidates(toRaw, settle) : [to0];
+      const fromAttach = fromSlides ? clearOfCaptions(attachCandidates(fromRaw, settle), conn.from, nodes) : [from0];
+      const toAttach = toSlides ? clearOfCaptions(attachCandidates(toRaw, settle), conn.to, nodes) : [to0];
       const fromEnds = fromAttach.map((a) => ({ pos: a.pos, facing: a.facing }));
       const toEnds = toAttach.map((a) => ({ pos: a.pos, facing: a.facing }));
       const pick = <T>(list: T[], ends: RouteEndpoint[], chosen: RouteEndpoint): T =>
@@ -1348,6 +1348,8 @@ export class GraphEngine {
         to = pick(toAttach, toEnds, tail.to);
       } else {
         const best = routeOrthogonalBest(fromEnds, toEnds, routeOpts);
+        const trace = (globalThis as unknown as { __swTrace?: unknown[] }).__swTrace;
+        if (trace) trace.push({ id: conn.id, obstacles, fromEnds, toEnds, routeOpts: { ...routeOpts, obstacles: undefined }, best });
         from = pick(fromAttach, fromEnds, best.from);
         to = pick(toAttach, toEnds, best.to);
       }
@@ -1429,6 +1431,36 @@ function connectorLabelBoxes(vnodes: VNode[]): Rect[] {
   };
   for (const node of vnodes) visit(node, {});
   return out;
+}
+
+/**
+ * The attach points that are not sitting on the node's own caption.
+ *
+ * A route ending on a node is let through whatever rect its port is inside, or it could
+ * never arrive. So a candidate that lands on the caption hands the caption over as a free
+ * corridor, and the arrow drives up through the middle of the node's name — which is how a
+ * port ring wide enough to graze the words undid the rule that captions block. Dropping
+ * those candidates keeps the caption blocking for every route, this one included.
+ *
+ * If every candidate is on it the port really is inside its own label and there is nothing
+ * to choose between: the list stands as it is.
+ */
+function clearOfCaptions<T extends { pos: Vec }>(
+  list: T[],
+  ep: Endpoint,
+  nodes: Map<string, ResolvedNodeInfo>,
+): T[] {
+  if (ep.kind === 'free') return list;
+  const info = nodes.get(ep.nodeId);
+  if (!info) return list;
+  const boxes = Object.values(info.labelBoxes)
+    .filter((b) => b.w > 0 && b.h > 0)
+    .map((b) => inflate(b, LABEL_GUARD));
+  if (boxes.length === 0) return list;
+  const inside = (r: Rect, p: Vec): boolean =>
+    p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h;
+  const kept = list.filter((c) => !boxes.some((b) => inside(b, c.pos)));
+  return kept.length > 0 ? kept : list;
 }
 
 /** Does this route run over a caption belonging to some other connector? */
