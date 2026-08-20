@@ -66,37 +66,28 @@ defineComponent({
     if (label) {
       var font = { size: labelSize, family: 'Inter, Segoe UI, sans-serif' };
       var ink = text.measure(label, font);
-      var total = geometry.polylineLength(drawn);
-      var midLen = total / 2;
-      labelAt = geometry.pointAtLength(drawn, midLen);
       // Half-extents of the text, with the breathing room the old plate used to give it.
       var halfW = ink.width / 2 + 4;
       var halfH = ink.height / 2 + 2;
-      var back = geometry.pointAtLength(drawn, Math.max(0, midLen - 2));
-      var fwd = geometry.pointAtLength(drawn, Math.min(total, midLen + 2));
-      var dx = fwd.x - back.x;
-      var dy = fwd.y - back.y;
-      var run = Math.hypot(dx, dy);
-      // How far the gap reaches along the line: where the line leaves the text's box. A
-      // horizontal run has to clear the whole width, a vertical one only the height.
-      var reach = halfW;
-      if (run > 1e-6) {
-        dx /= run;
-        dy /= run;
-        reach = Math.min(
-          Math.abs(dx) > 1e-6 ? halfW / Math.abs(dx) : Infinity,
-          Math.abs(dy) > 1e-6 ? halfH / Math.abs(dy) : Infinity,
-        );
-      }
+      var total = geometry.polylineLength(drawn);
+      labelAt = labelSpot(drawn, total, halfW * 2);
+      var box = { x: labelAt.x - halfW, y: labelAt.y - halfH, w: halfW * 2, h: halfH * 2 };
+      // The gap is the run of the line that is actually behind the words, measured rather
+      // than estimated from the direction at the middle: a route that turns a corner under
+      // its own label is inside the box twice over, and an estimate cuts only one of them.
+      var span = insideSpan(drawn, box);
       // On a run too short to lose the whole gap, keep a stub either side so it still reads
       // as a connector rather than as two arrowheads with a word between them.
-      var maxReach = midLen - 4;
-      if (maxReach > 0) {
-        reach = Math.min(reach, maxReach);
-        parts = [
-          geometry.trimPolyline(drawn, 0, total - (midLen - reach)),
-          geometry.trimPolyline(drawn, midLen + reach, 0),
-        ];
+      var keep = Math.min(4, total / 4);
+      if (span) {
+        var lo = Math.max(span.lo, keep);
+        var hi = Math.min(span.hi, total - keep);
+        if (hi - lo > 0.5) {
+          parts = [
+            geometry.trimPolyline(drawn, 0, total - lo),
+            geometry.trimPolyline(drawn, hi, 0),
+          ];
+        }
       }
     }
 
@@ -159,4 +150,72 @@ function pointsAttr(points) {
       return pt.x + ',' + pt.y;
     })
     .join(' ');
+}
+
+/*
+ * Where to write the caption.
+ *
+ * The middle of the route is the obvious answer and the wrong one: a route bends, and the
+ * middle is as likely as not to be the bend itself, which leaves the words draped over a
+ * corner with line sticking out on both sides. So the caption goes on a straight run — the
+ * one nearest the middle that is long enough to hold it, sliding along that run to stay as
+ * close to the middle as it can. If nothing is long enough, the middle it is.
+ */
+function labelSpot(points, total, need) {
+  var best = null;
+  var at = 0;
+  for (var i = 1; i < points.length; i += 1) {
+    var a = points[i - 1];
+    var b = points[i];
+    var len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len >= need) {
+      var pos = Math.min(Math.max(total / 2, at + need / 2), at + len - need / 2);
+      var score = Math.abs(pos - total / 2);
+      if (!best || score < best.score) best = { score: score, at: pos };
+    }
+    at += len;
+  }
+  return geometry.pointAtLength(points, best ? best.at : total / 2);
+}
+
+/** The stretch of the polyline, in arc length, that lies inside `box`. */
+function insideSpan(points, box) {
+  var lo = Infinity;
+  var hi = -Infinity;
+  var at = 0;
+  for (var i = 1; i < points.length; i += 1) {
+    var a = points[i - 1];
+    var b = points[i];
+    var len = Math.hypot(b.x - a.x, b.y - a.y);
+    var span = segmentInBox(a, b, box);
+    if (span) {
+      lo = Math.min(lo, at + span[0] * len);
+      hi = Math.max(hi, at + span[1] * len);
+    }
+    at += len;
+  }
+  return hi > lo ? { lo: lo, hi: hi } : null;
+}
+
+/** Slab clip: the parametric interval of `a`->`b` inside the box, or null. */
+function segmentInBox(a, b, box) {
+  var t0 = 0;
+  var t1 = 1;
+  var d = [-(b.x - a.x), b.x - a.x, -(b.y - a.y), b.y - a.y];
+  var q = [a.x - box.x, box.x + box.w - a.x, a.y - box.y, box.y + box.h - a.y];
+  for (var i = 0; i < 4; i += 1) {
+    if (Math.abs(d[i]) < 1e-9) {
+      if (q[i] < 0) return null;
+      continue;
+    }
+    var t = q[i] / d[i];
+    if (d[i] < 0) {
+      if (t > t1) return null;
+      if (t > t0) t0 = t;
+    } else {
+      if (t < t0) return null;
+      if (t < t1) t1 = t;
+    }
+  }
+  return [t0, t1];
 }

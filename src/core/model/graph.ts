@@ -211,6 +211,8 @@ export interface ResolvedConnectionInfo {
   points: Vec[];
   vnodes: VNode[];
   bounds: Rect;
+  /** World boxes of any caption it drew, so the connectors after it can keep clear. */
+  labelBoxes: Rect[];
   error: string | null;
   warning: string | null;
 }
@@ -904,9 +906,34 @@ export class GraphEngine {
     for (const id of doc.connectionOrder) {
       const conn = doc.connections[id];
       if (!conn) continue;
-      const resolvedConn = this.resolveConnection(doc, conn, nodes, graphApi);
+      const resolvedConn = this.resolveConnection(doc, conn, nodes, connections, graphApi);
       connections.set(id, resolvedConn);
       if (resolvedConn.error) errors.push({ id, message: resolvedConn.error });
+    }
+
+    /*
+     * -- stage 5b: keep clear of the captions that were not there yet ----------
+     *
+     * A caption's position is only known once its connector has been routed, so everything
+     * ahead of it in the order was routed blind to it. Leaving it there would make the
+     * drawing order decide who gives way, which is arbitrary — the reading is spoiled just
+     * the same whichever line lands on the words.
+     *
+     * So the connectors that ended up crossing a foreign caption are routed once more,
+     * this time against every caption on the sheet. They all see the captions as they
+     * stood after the first pass, so a repair does not depend on the repairs before it.
+     * One pass, no chasing: a reroute moves its own caption, so following the last
+     * collision could go round forever.
+     */
+    const firstPass = new Map(connections);
+    for (const id of doc.connectionOrder) {
+      const conn = doc.connections[id];
+      const info = connections.get(id);
+      if (!conn || !info || info.error) continue;
+      if (!crossesForeignLabel(info, firstPass)) continue;
+      const repaired = this.resolveConnection(doc, conn, nodes, firstPass, graphApi);
+      connections.set(id, repaired);
+      if (repaired.error) errors.push({ id, message: repaired.error });
     }
 
     // -- indexes --------------------------------------------------------------
@@ -1092,6 +1119,8 @@ export class GraphEngine {
     doc: SwDocument,
     conn: Connection,
     nodes: Map<string, ResolvedNodeInfo>,
+    /** Connections already resolved this pass — the only ones with a caption to avoid. */
+    done: Map<string, ResolvedConnectionInfo>,
     graphApi: Record<string, unknown>,
   ): ResolvedConnectionInfo {
     const attachGrid = snapGridOf(doc.grid);
@@ -1226,6 +1255,24 @@ export class GraphEngine {
         // the space the route might use.
         if (!widened) break;
       }
+
+      /*
+       * A connector's caption is drawn on the sheet like anything else, and a second route
+       * running through it leaves neither readable — the words are cut out of their own
+       * line, so there is nothing behind them to tell the two apart.
+       *
+       * Only the connections already resolved this pass have a caption to keep clear of,
+       * which makes this an order rule rather than a constraint to solve: the earlier
+       * connector keeps its route and the later one gives way, in the same order they are
+       * painted in. Solving it for all of them at once would mean routing every connector
+       * against every other's label, which each reroute then invalidates.
+       */
+      for (const other of done.values()) {
+        if (other.id === conn.id) continue;
+        for (const box of other.labelBoxes) {
+          if (rectIntersects(region, box)) obstacles.push(inflate(box, LABEL_GUARD));
+        }
+      }
     }
 
     /*
@@ -1356,10 +1403,74 @@ export class GraphEngine {
       points,
       vnodes,
       bounds: { x: box.x - 12, y: box.y - 12, w: box.w + 24, h: box.h + 24 },
+      labelBoxes: connectorLabelBoxes(vnodes),
       error,
       warning,
     };
   }
+}
+
+/**
+ * Every caption a connector drew, in world space.
+ *
+ * A connector has no annotations to declare a label with — it is not placed on a shape, it
+ * is computed — so the text it drew is taken as read. Its output is already in world space,
+ * so what `labelBounds` measures is the box on the sheet.
+ */
+function connectorLabelBoxes(vnodes: VNode[]): Rect[] {
+  const out: Rect[] = [];
+  const visit = (node: VNode, inherited: Record<string, string>): void => {
+    const attrs = { ...inherited, ...node.attrs };
+    if (node.tag === 'text') {
+      const box = labelBounds(node, { x: 0, y: 0 }, node.text ?? '', attrs);
+      if (box.w > 0 && box.h > 0) out.push(box);
+    }
+    for (const child of node.children) visit(child, attrs);
+  };
+  for (const node of vnodes) visit(node, {});
+  return out;
+}
+
+/** Does this route run over a caption belonging to some other connector? */
+function crossesForeignLabel(
+  info: ResolvedConnectionInfo,
+  all: Map<string, ResolvedConnectionInfo>,
+): boolean {
+  for (const other of all.values()) {
+    if (other.id === info.id) continue;
+    for (const box of other.labelBoxes) {
+      for (let i = 1; i < info.points.length; i += 1) {
+        if (segmentHitsRect(info.points[i - 1], info.points[i], box)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** Segment against an axis-aligned box, by the slab method — the segment may be diagonal. */
+function segmentHitsRect(a: Vec, b: Vec, r: Rect): boolean {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const clip = (p: number, q: number): boolean => {
+    if (Math.abs(p) < 1e-9) return q >= 0;
+    const t = q / p;
+    if (p < 0) {
+      if (t > t1) return false;
+      if (t > t0) t0 = t;
+    } else {
+      if (t < t0) return false;
+      if (t < t1) t1 = t;
+    }
+    return true;
+  };
+  return (
+    clip(-dx, a.x - r.x) &&
+    clip(dx, r.x + r.w - a.x) &&
+    clip(-dy, a.y - r.y) &&
+    clip(dy, r.y + r.h - a.y)
+  );
 }
 
 interface DynamicPort {
