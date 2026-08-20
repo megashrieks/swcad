@@ -1,0 +1,16 @@
+{
+  "body": [
+    {
+      "kind": "label",
+      "bind": "params.text",
+      "editable": true,
+      "markdown": true
+    },
+    {
+      "kind": "style",
+      "attrs": {
+        "fill": "params.fill"
+      }
+    }
+  ]
+}

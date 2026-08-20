@@ -228,8 +228,9 @@ script is never hot-reloaded into the sheet.
 
 ## Base library
 
-`box`, `circle`, `diamond`, `note`, `arrow` and `title-block`. `box` demonstrates state-driven
-styling ("turn green when every port is connected") and `arrow` is a fully scripted, graph-aware
+`box`, `circle`, `diamond`, `text`, `arrow` and `title-block`. `box` demonstrates state-driven
+styling ("turn green when every port is connected"), `text` is a markdown block that is typed
+straight onto the drawing and resizes itself to fit, and `arrow` is a fully scripted, graph-aware
 connector that inspects nearby obstacles and picks its own path.
 
 ## Theming
@@ -269,7 +270,7 @@ them, and so may any component:
 Browsers resolve `var()` inside SVG presentation attributes, so on screen this costs nothing — the
 attribute passes through the sanitiser untouched and the engine paints it. A component that writes
 a literal colour instead keeps that colour forever; nothing rewrites authored hex. The shipped
-`base` and `meta` libraries use tokens, with the sticky note deliberately left yellow.
+`base` and `meta` libraries use tokens throughout.
 
 Two places need real colour strings and get them from `readCanvasPalette()`, which resolves each
 token through a probe element (`getPropertyValue` would hand back an unresolved `color-mix(...)`):

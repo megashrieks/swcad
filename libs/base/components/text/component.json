@@ -1,0 +1,23 @@
+{
+  "id": "text",
+  "name": "Text",
+  "version": "1.0.0",
+  "category": "annotation",
+  "description": "A block of Markdown that sizes itself to what you type. Double-click to edit: **bold**, *italic*, `code`, ~~strike~~, # headings, - lists and > quotes all work.",
+  "resizable": false,
+  "params": [
+    {
+      "name": "text",
+      "type": "string",
+      "label": "Text",
+      "default": "Text",
+      "hidden": true
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Colour",
+      "default": "var(--sw-ink)"
+    }
+  ]
+}
