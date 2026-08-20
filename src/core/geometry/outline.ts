@@ -24,6 +24,15 @@ export interface AttachGrid {
 /** How far, in grid steps, an attach point may be nudged to reach a grid line. */
 const SNAP_REACH = 0.75;
 
+/** Below this the surface barely faces the way a departure would go, so it would graze it. */
+const TANGENT_MIN = 0.15;
+
+/** How square-on a surface must face a corner before a diagonal lead-in is worth offering. */
+const CORNER_MIN = 0.5;
+
+/** Guard against a port shape far larger than the grid asking for a line per pixel. */
+const MAX_LATTICE_LINES = 64;
+
 /**
  * True when the outline encloses its own centre, so a ray leaving that centre always
  * finds an edge — and the point it finds can be anywhere on the shape, not just its
@@ -318,6 +327,111 @@ function outlineProject(o: { points: Vec[]; closed: boolean }, target: Vec): { p
   if (best) return { pos: best.pos, facing: best.facing };
   const c = o.points.length > 0 ? outlineCenter({ kind: 'polygon', points: o.points, closed: o.closed }) : { x: 0, y: 0 };
   return { pos: c, facing: { x: 0, y: 0 } };
+}
+
+/**
+ * Every spot where the outline crosses a grid line, with the departures that line supports.
+ *
+ * This is the exact answer to the question the direction sweep only samples: a connector on
+ * a snapped sheet may only leave a port along a lane, so the places it can leave from are
+ * precisely the crossings of the shape with the lattice. Enumerating them is complete (no
+ * spot is missed because it fell between two sampled rays), symmetric (mirrored shapes give
+ * mirrored candidates rather than whichever the sweep reached first) and scales with the
+ * shape: a big ring offers more spots than a small one, at the same spacing.
+ *
+ * A crossing of a vertical line can be left along that column, so its departure is vertical,
+ * and a crossing of a horizontal line is left along its row. A spot on both offers both. The
+ * departure is dropped when the surface barely faces that way — leaving the side of a circle
+ * vertically would graze it — and where the surface faces a corner squarely the true normal
+ * is offered as well, since a diagonal lead-in across the corner can be the shorter route.
+ */
+export function outlineLatticeAttach(o: Outline, grid: AttachGrid): { pos: Vec; facing: Vec }[] {
+  const step = grid.step;
+  if (!(step > 0)) return [];
+  const origin = grid.origin ?? { x: 0, y: 0 };
+  const out: { pos: Vec; facing: Vec }[] = [];
+
+  const add = (pos: Vec, facing: Vec): void => {
+    if (
+      out.some(
+        (p) =>
+          Math.hypot(p.pos.x - pos.x, p.pos.y - pos.y) < 1e-6 &&
+          Math.hypot(p.facing.x - facing.x, p.facing.y - facing.y) < 1e-6,
+      )
+    )
+      return;
+    out.push({ pos, facing });
+  };
+
+  /** `held` names the coordinate that landed on a line, which is the one the route holds. */
+  const emit = (pos: Vec, normal: Vec, held: 'x' | 'y'): void => {
+    const l = Math.hypot(normal.x, normal.y);
+    if (l < EPS) return;
+    const n = { x: normal.x / l, y: normal.y / l };
+    const along = held === 'x' ? n.y : n.x;
+    if (Math.abs(along) < TANGENT_MIN) return;
+    add(pos, held === 'x' ? { x: 0, y: Math.sign(along) } : { x: Math.sign(along), y: 0 });
+    if (Math.min(Math.abs(n.x), Math.abs(n.y)) / Math.max(Math.abs(n.x), Math.abs(n.y)) > CORNER_MIN) add(pos, n);
+  };
+
+  const linesIn = (axis: 'x' | 'y', lo: number, hi: number): number[] => {
+    const from = Math.ceil((lo - origin[axis]) / step);
+    const to = Math.floor((hi - origin[axis]) / step);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to - from > MAX_LATTICE_LINES) return [];
+    const list: number[] = [];
+    for (let k = from; k <= to; k += 1) list.push(origin[axis] + k * step);
+    return list;
+  };
+
+  if (o.kind === 'ellipse') {
+    // A coordinate of a point on the ellipse is `a·cos t + b·sin t + c`, i.e. `R·cos(t − φ)`,
+    // so the parameters putting it on a line are `φ ± acos((line − c) / R)` — the same solve
+    // `snapAlongEllipse` uses, run over every line the shape spans instead of the nearest.
+    const rad = (o.rot * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const coef = {
+      x: { a: o.rx * cos, b: -o.ry * sin, c: o.c.x },
+      y: { a: o.rx * sin, b: o.ry * cos, c: o.c.y },
+    };
+    for (const axis of ['x', 'y'] as const) {
+      const { a, b, c } = coef[axis];
+      const r = Math.hypot(a, b);
+      if (r < EPS) continue;
+      const phi = Math.atan2(b, a);
+      for (const line of linesIn(axis, c - r, c + r)) {
+        const spread = Math.acos(Math.min(1, Math.max(-1, (line - c) / r)));
+        for (const t of [phi + spread, phi - spread]) {
+          const p = ellipsePoint(o, t);
+          emit(p.pos, p.facing, axis);
+        }
+      }
+    }
+    return out;
+  }
+
+  const center = outlineCenter(o);
+  for (const [a, b] of segments(o)) {
+    const ex = b.x - a.x;
+    const ey = b.y - a.y;
+    if (Math.hypot(ex, ey) < EPS) continue;
+    const raw = norm({ x: ey, y: -ex });
+    const mid = { x: (a.x + b.x) / 2 - center.x, y: (a.y + b.y) / 2 - center.y };
+    const sign = raw.x * mid.x + raw.y * mid.y >= 0 ? 1 : -1;
+    const outward = { x: raw.x * sign, y: raw.y * sign };
+    for (const axis of ['x', 'y'] as const) {
+      const d = axis === 'x' ? ex : ey;
+      // An edge running along the line it would be measured against has no single crossing.
+      if (Math.abs(d) < EPS) continue;
+      const start = axis === 'x' ? a.x : a.y;
+      for (const line of linesIn(axis, Math.min(start, start + d), Math.max(start, start + d))) {
+        const u = (line - start) / d;
+        if (u < 0 || u > 1) continue;
+        emit({ x: a.x + ex * u, y: a.y + ey * u }, outward, axis);
+      }
+    }
+  }
+  return out;
 }
 
 /** Distance from a point to the outline itself (not to the area it encloses). */

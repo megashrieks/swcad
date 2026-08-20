@@ -8,6 +8,7 @@ import {
   outlineAttach,
   outlineBounds,
   outlineCenter,
+  outlineLatticeAttach,
   type AttachGrid,
   type Outline,
 } from '../geometry/outline';
@@ -82,35 +83,40 @@ interface Attach {
 /**
  * Every spot on a sliding port a connector might reasonably land on.
  *
- * The shape is sampled by direction rather than by arc length, because that is the aim a
- * port already understands: `settle` turns a point to aim at into the place on the shape a
- * ray from its centre leaves, along with the normal there. Sampling evenly around the
- * circle therefore covers a circle evenly, and a rectangle by its faces and corners, with
- * no per-shape code. Duplicates — several directions that land on the same corner of a
- * polygon — are dropped so they are not routed twice.
+ * On a snapped sheet a connector may only travel along the lattice, so the spots it can
+ * leave from are exactly where the shape crosses a grid line — those are enumerated
+ * directly, which is complete, order-independent and as fine as the shape is large.
+ *
+ * Without a grid there are no lines to cross, so the shape is sampled by direction instead:
+ * `settle` turns a point to aim at into the place on the shape a ray from its centre leaves,
+ * along with the normal there, which covers a circle evenly and a rectangle by its faces and
+ * corners with no per-shape code. Candidates that share both a position and a facing are the
+ * same offer and are dropped; sharing only a position is not — one may leave along an axis
+ * and the other on the shape's own normal, and they route to different lengths.
  */
-function attachCandidates(ep: Attach, settle: (ep: Attach, toward: Vec) => Attach): Attach[] {
+function attachCandidates(ep: Attach, settle: (ep: Attach, toward: Vec) => Attach, grid?: AttachGrid): Attach[] {
   if (!ep.outline) return [ep];
-  const c = outlineCenter(ep.outline);
-  const box = outlineBounds(ep.outline);
-  const reach = Math.max(box.w, box.h) + 1;
   const out: Attach[] = [];
-  for (let i = 0; i < ATTACH_SAMPLES; i += 1) {
-    const a = (i / ATTACH_SAMPLES) * Math.PI * 2;
-    const hit = settle(ep, { x: c.x + Math.cos(a) * reach, y: c.y + Math.sin(a) * reach });
-    // Pulling a point onto the grid lands neighbouring directions on the same spot, but they
-    // are not the same offer: one leaves along an axis, the other on the shape's own normal,
-    // and they route to different lengths. Keeping only the first the sweep reached made a
-    // ring offer a diagonal approach at two of its quadrant corners and a square one at the
-    // others, so mirrored connectors arrived differently. Both are kept, and the router picks
-    // whichever gives the shorter connector.
+  const add = (hit: { pos: Vec; facing: Vec; error?: string }): void => {
     const dup = out.some(
       (p) =>
         Math.hypot(p.pos.x - hit.pos.x, p.pos.y - hit.pos.y) < 1e-6 &&
         Math.hypot(p.facing.x - hit.facing.x, p.facing.y - hit.facing.y) < 1e-6,
     );
-    if (dup) continue;
-    out.push(hit);
+    if (!dup) out.push({ ...hit, ...(ep.error ? { error: ep.error } : {}) });
+  };
+
+  if (grid?.step) {
+    for (const hit of outlineLatticeAttach(ep.outline, grid)) add(hit);
+    if (out.length > 0) return out;
+  }
+
+  const c = outlineCenter(ep.outline);
+  const box = outlineBounds(ep.outline);
+  const reach = Math.max(box.w, box.h) + 1;
+  for (let i = 0; i < ATTACH_SAMPLES; i += 1) {
+    const a = (i / ATTACH_SAMPLES) * Math.PI * 2;
+    add(settle(ep, { x: c.x + Math.cos(a) * reach, y: c.y + Math.sin(a) * reach }));
   }
   return out.length > 0 ? out : [ep];
 }
@@ -1336,8 +1342,8 @@ export class GraphEngine {
         ...routingGridOf(doc.grid),
       };
 
-      const fromAttach = fromSlides ? clearOfCaptions(attachCandidates(fromRaw, settle), conn.from, nodes) : [from0];
-      const toAttach = toSlides ? clearOfCaptions(attachCandidates(toRaw, settle), conn.to, nodes) : [to0];
+      const fromAttach = fromSlides ? clearOfCaptions(attachCandidates(fromRaw, settle, attachGrid), conn.from, nodes) : [from0];
+      const toAttach = toSlides ? clearOfCaptions(attachCandidates(toRaw, settle, attachGrid), conn.to, nodes) : [to0];
       const fromEnds = fromAttach.map((a) => ({ pos: a.pos, facing: a.facing }));
       const toEnds = toAttach.map((a) => ({ pos: a.pos, facing: a.facing }));
       const pick = <T>(list: T[], ends: RouteEndpoint[], chosen: RouteEndpoint): T =>
