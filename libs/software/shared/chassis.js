@@ -10,6 +10,10 @@
  * perimeter, so the symbols sit on the sheet as marks rather than as cards - put
  * a base/box behind one if a container is wanted.
  *
+ * Because the drawing hugs its content, the instance box is not a size and these
+ * components are not resizable: `iconSize` says how big the symbol is, and the
+ * caption follows from `fontSize`.
+ *
  * It is drawn from a script rather than from a static `shape.svg` for one reason:
  * static geometry is stretched by the engine on resize, with the x and y scales
  * applied separately. That is right for a plain box and wrong for a pictogram -
@@ -58,17 +62,18 @@ defineComponent({
     var subH = subtitle ? subSize * 1.3 : 0;
     var textH = titleH + subH;
 
-    // The glyph takes whichever axis runs out first, so it stays square: a wide
-    // node gets a big icon, and one squashed flat drops it rather than smear it.
-    // It is not capped at the authored 64: these are vector outlines, so scaling
-    // past 1:1 costs nothing, and a cap would make the resize grip look broken -
-    // dragging the box out would add padding and leave the symbol the same size.
+    // `iconSize` is how big the symbol is. These components are not resizable,
+    // because the instance box was never the size of anything: the drawn box
+    // hugs its content, so dragging it only fed this one number, and it fed it
+    // badly - the room left for the glyph is what the caption did not take, so
+    // two boxes dragged to the same size came out with different icons whenever
+    // their labels were different lengths. Saying the number outright is the
+    // whole point; it is not capped by the box, and it is not capped at the
+    // authored size either, since these are vector outlines that cost nothing
+    // to scale up.
     //
-    // `iconSize` says the number outright, for when the box is the wrong handle:
-    // two symbols read as a pair when their glyphs match, and getting there by
-    // resizing means matching two boxes whose captions are different lengths and
-    // so take different amounts of room. An explicit size is used as given, and
-    // the box below grows to hold it rather than clipping it back.
+    // 0 means "take it from the instance box", which is how every sheet drawn
+    // before the parameter existed is still measured.
     var room = Math.min(w - pad * 2, h - pad * 2 - textH - (textH > 0 ? gap : 0));
     var glyph = showIcon ? (iconSize > 0 ? iconSize : Math.max(0, room)) : 0;
     if (!(glyph >= 12)) glyph = 0;
@@ -85,16 +90,12 @@ defineComponent({
 
     // The hit box hugs the drawn content rather than the whole instance box, so
     // selecting, grabbing and routing all treat the symbol as the size it looks.
+    // It hangs from the node's origin: the instance box is not editable, so the
+    // two corners agree until the caption or the icon size changes it.
     //
-    // It hangs from the node's origin rather than sitting centred in the instance
-    // box. Centring looked tidier but meant that growing the box on an axis the
-    // glyph could not use slid the whole symbol sideways - dragging the resize
-    // grip past the point where it stops having an effect would walk the
-    // component across the sheet instead of doing nothing.
-    //
-    // A glyph sized by hand is not capped by the box: the number is the promise,
-    // and clipping it back to whatever room the instance happens to have would
-    // make two symbols set to the same size come out different again.
+    // A glyph sized by hand is not clipped back to the instance box - the number
+    // is the promise, and honouring it only sometimes would put two symbols set
+    // to the same size back to different sizes.
     var naturalW = contentW + pad * 2;
     var naturalH = contentH + pad * 2;
     var boxW = iconSize > 0 ? naturalW : Math.min(w, naturalW);
@@ -205,22 +206,6 @@ defineComponent({
         r: r2(ringR),
         fill: 'none',
         stroke: 'transparent',
-      }),
-    );
-
-    // The resize grip. The editor draws the square itself for a selected node, so this only
-    // has to say where: the bottom-right of the hit box. That corner tracks the pointer 1:1
-    // on a diagonal drag, which the connect ring's does not - the ring is a function of the
-    // glyph, so it grows by half a diagonal per side and runs ahead of the cursor. It is a
-    // zero-radius point, so saying so adds nothing to the bounds.
-    children.push(
-      svg.circle({
-        id: 'grip',
-        cx: r2(boxX + boxW),
-        cy: r2(boxY + boxH),
-        r: 0,
-        fill: 'none',
-        stroke: 'none',
       }),
     );
 

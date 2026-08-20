@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "category": "edge",
   "description": "Spreads traffic across a pool of instances.",
-  "resizable": true,
+  "resizable": false,
   "defaultSize": {
     "w": 130,
     "h": 130

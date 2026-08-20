@@ -19,15 +19,5 @@
     "name": "edge",
     "direction": "inout",
     "surface": "outline"
-  },
-  "grip": {
-    "kind": "handle",
-    "name": "resize",
-    "drives": [
-      "size.w",
-      "size.h"
-    ],
-    "axis": "both",
-    "min": 40
   }
 }

@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "category": "compute",
   "description": "An application service or microservice.",
-  "resizable": true,
+  "resizable": false,
   "defaultSize": {
     "w": 130,
     "h": 130

@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "category": "edge",
   "description": "Single entry point that fans requests out to services.",
-  "resizable": true,
+  "resizable": false,
   "defaultSize": {
     "w": 130,
     "h": 130

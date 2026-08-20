@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "category": "platform",
   "description": "Third-party service outside the system boundary.",
-  "resizable": true,
+  "resizable": false,
   "defaultSize": {
     "w": 130,
     "h": 130

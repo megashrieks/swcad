@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "category": "data",
   "description": "Blob and file storage.",
-  "resizable": true,
+  "resizable": false,
   "defaultSize": {
     "w": 130,
     "h": 130

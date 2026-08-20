@@ -245,6 +245,19 @@ styling ("turn green when every port is connected"), `text` is a markdown block 
 straight onto the drawing and resizes itself to fit, and `arrow` is a fully scripted, graph-aware
 connector that inspects nearby obstacles and picks its own path.
 
+## Software library
+
+Twenty architecture pictograms (service, database, queue, CDN, …) drawn by one shared script,
+`libs/software/shared/chassis.js`: an icon with a title and subtitle under it, an invisible rect
+hugging that content as the hit area, and a transparent circle around the icon as the port.
+
+These are the one shipped family that is **not resizable**. The drawing hugs its content, so the
+instance box was never its size — dragging it only fed the icon size, and fed it badly: the glyph
+got whatever room the caption left, so two boxes dragged to the same size came out with different
+icons whenever their labels were different lengths. `Icon size` says the number instead, and the
+box follows it. `0` means "take it from the instance box", which is how sheets drawn before the
+parameter existed are still measured.
+
 ## Theming
 
 The chrome is built on a vendored subset of **`@pomavo/ui`** in `src/ui/pomavo/` — shadcn-style

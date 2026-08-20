@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "category": "compute",
   "description": "Background job or scheduled task runner.",
-  "resizable": true,
+  "resizable": false,
   "defaultSize": {
     "w": 130,
     "h": 130
