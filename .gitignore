@@ -5,3 +5,8 @@ dist/
 .DS_Store
 tests/e2e/*.png
 projects/demo/
+
+# Throwaway probe scripts and scratch output used while working on the editor.
+probe-*.mjs
+tmp-*
+projects/scratch/

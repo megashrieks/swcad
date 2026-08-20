@@ -383,15 +383,20 @@ export function InspectorPanel({
         <>
           <div className="subhead">Ports</div>
           <ul className="list">
-            {info.ports.map((port) => (
-              <li key={port.id}>
-                <span className={`dot${port.connected ? ' is-connected' : ''}`} />
-                {port.name}
-                <span className="muted">
-                  {port.direction} · {port.connections.length} link{port.connections.length === 1 ? '' : 's'}
-                </span>
-              </li>
-            ))}
+            {/* Same-named pins are one logical port with one merged link list, so
+                listing each would repeat the same row and the same count. */}
+            {info.ports
+              .filter((port) => !port.group || port.group[0] === port.id)
+              .map((port) => (
+                <li key={port.id}>
+                  <span className={`dot${port.connected ? ' is-connected' : ''}`} />
+                  {port.name}
+                  <span className="muted">
+                    {port.direction} · {port.connections.length} link{port.connections.length === 1 ? '' : 's'}
+                    {port.group ? ` · ${port.group.length} pins` : ''}
+                  </span>
+                </li>
+              ))}
           </ul>
         </>
       )}

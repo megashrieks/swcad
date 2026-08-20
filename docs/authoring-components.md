@@ -394,6 +394,12 @@ ports connected" gets a sane answer), `ctx.graph.connectionsOf(node, pin)` answe
 and two pins of the same group cannot be joined to each other. Ports you want kept apart simply
 need distinct names — the default name is the element id, so this never happens by accident.
 
+Name a group `edge` when its pins are simply "anywhere on this symbol" and nothing distinguishes
+them. That is what `base/box` and `base/circle` call their outline port and what every component
+in `libs/software` calls its four pins, so a connector can be dropped on any of them and land the
+same way. Reserve real names for pins that mean different things — `base/diamond` keeps `yes` and
+`no` apart precisely because picking the near one would be wrong.
+
 **Compact vs body-sized outlines.** An outline port that covers at most a quarter of the node's
 area (and no more than 60% of either axis) counts as *compact*: a small pin, pad or tab. Compact
 ports behave like discrete ones — the pointer picks them up in the select tool, they show their
