@@ -179,6 +179,30 @@ export function pointAtLength(points: readonly Vec[], at: number): Vec {
 
 const n = (v: number): string => (Number.isFinite(v) ? String(Math.round(v * 1000) / 1000) : '0');
 
+/**
+ * The polyline with the given arc lengths cut off each end.
+ *
+ * A stroke drawn all the way to its arrowhead's tip pokes half a stroke width past it — the
+ * line cap is centred on the last point — so the head looks set back from a nub of line.
+ * Trimming the drawn path to the head's base hides the cap inside the head instead.
+ *
+ * Both trims are clamped so an over-long trim collapses the line rather than reversing it.
+ */
+export function trimPolyline(points: readonly Vec[], fromStart = 0, fromEnd = 0): Vec[] {
+  if (points.length < 2) return points.slice();
+  const total = polylineLength(points);
+  const start = clamp(fromStart, 0, total);
+  const end = clamp(total - fromEnd, start, total);
+  const out: Vec[] = [pointAtLength(points, start)];
+  let travelled = 0;
+  for (let i = 1; i < points.length - 1; i += 1) {
+    travelled += dist(points[i - 1], points[i]);
+    if (travelled > start && travelled < end) out.push(points[i]);
+  }
+  out.push(pointAtLength(points, end));
+  return out;
+}
+
 /** SVG path data from a polyline, with optional rounded corners. */
 export function polylinePath(points: readonly Vec[], radius = 0): string {
   if (points.length === 0) return '';

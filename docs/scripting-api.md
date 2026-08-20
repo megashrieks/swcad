@@ -104,7 +104,8 @@ Attributes with a `null`/`undefined` value are dropped. Output is sanitised: unk
 
 `add`, `sub`, `scale`, `length`, `normalize`, `distance`, `rect`, `rectFromPoints`,
 `transformedBounds`, `snapTo`, `polylinePath(points, radius)`, `smoothPath(points)`,
-`pointAtLength(points, len)`, `polylineLength(points)`, `distToSegment(p, a, b)`.
+`pointAtLength(points, len)`, `polylineLength(points)`, `distToSegment(p, a, b)`,
+`trimPolyline(points, fromStart, fromEnd)`.
 
 ## `route`
 
@@ -114,6 +115,13 @@ Attributes with a `null`/`undefined` value are dropped. Output is sanitised: unk
 | `route.straight(a, b, opts)` | direct, honouring waypoints |
 | `route.curve(a, b, opts)` | smooth path through the computed points |
 | `route.arrowHead(tip, from, size)` | three points for an arrowhead polygon |
+| `route.arrowHeadDepth(size)` | how far back that head reaches from its tip |
+
+Draw the stroke only as far as the head's base, not to the tip:
+`geometry.trimPolyline(pts, 0, route.arrowHeadDepth(size))`. A line cap is centred on the last
+point, so a path drawn to the tip pokes half a stroke width past it and the head looks set back
+from a nub of line. Keep the untrimmed points in `data-swcad-route` — that is the route the
+editor hit-tests and adds waypoints to.
 
 `opts`: `{ fromFacing, toFacing, waypoints, obstacles, stub, clearance, router, bendPenalty, grid, gridOrigin }`.
 

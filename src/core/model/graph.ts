@@ -1,7 +1,7 @@
 import type { Rect, Transform, Vec } from '../geometry/index';
 import * as geometryApi from '../geometry/index';
 import { boundsOf, inflate, rect, rectContains, rectIntersects, rectUnion, toWorld, transformedBounds, rotate, norm } from '../geometry/index';
-import { arrowHead, route as routeBetween, routeOrthogonalBest } from '../geometry/routing';
+import { arrowHead, arrowHeadDepth, route as routeBetween, routeOrthogonalBest } from '../geometry/routing';
 import type { RouteEndpoint } from '../geometry/routing';
 import {
   isClosedOutline,
@@ -537,6 +537,7 @@ export class GraphEngine {
             toOwnerBounds: this.routingOwners?.to,
           }),
         arrowHead,
+        arrowHeadDepth,
       }),
       require: this.makeRequire(entry.libId, logs, new Set()),
     };
@@ -1537,8 +1538,11 @@ function defaultConnectorVNodes(points: Vec[], conn: Connection): VNode[] {
   const stroke = String(conn.params.stroke ?? DEFAULT_CONNECTOR_STROKE);
   const width = Number(conn.params.strokeWidth ?? 1.6);
   const radius = Number(conn.params.radius ?? 6);
-  const head = conn.params.arrow === false ? null : arrowHead(points.at(-1)!, points.at(-2) ?? points[0], Number(conn.params.headSize ?? 9));
-  const d = pathFromPoints(points, radius, String(conn.params.style ?? 'orthogonal'));
+  const headSize = Number(conn.params.headSize ?? 9);
+  const head = conn.params.arrow === false ? null : arrowHead(points.at(-1)!, points.at(-2) ?? points[0], headSize);
+  // The stroke stops at the head's base; drawn to the tip its cap would poke past the point.
+  const drawn = head ? geometryApi.trimPolyline(points, 0, arrowHeadDepth(headSize)) : points;
+  const d = pathFromPoints(drawn, radius, String(conn.params.style ?? 'orthogonal'));
   const out: VNode[] = [
     svgBuilder.path({
       d,

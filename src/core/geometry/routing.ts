@@ -768,8 +768,11 @@ export function route(from: RouteEndpoint, to: RouteEndpoint, opts: RouteOptions
   return routeOrthogonal(from, to, opts);
 }
 
+/** Half-angle between an arrowhead's axis and each of its barbs. */
+export const ARROW_HEAD_SPREAD = 0.42;
+
 /** Arrowhead polygon points for a route ending at `tip`. */
-export function arrowHead(tip: Vec, from: Vec, size = 10, spread = 0.42): Vec[] {
+export function arrowHead(tip: Vec, from: Vec, size = 10, spread = ARROW_HEAD_SPREAD): Vec[] {
   const dx = tip.x - from.x;
   const dy = tip.y - from.y;
   const angle = Math.atan2(dy, dx);
@@ -779,4 +782,13 @@ export function arrowHead(tip: Vec, from: Vec, size = 10, spread = 0.42): Vec[] 
     { x: tip.x - Math.cos(angle - spread) * s, y: tip.y - Math.sin(angle - spread) * s },
     { x: tip.x - Math.cos(angle + spread) * s, y: tip.y - Math.sin(angle + spread) * s },
   ];
+}
+
+/**
+ * How far back along the route an arrowhead of this size reaches — the distance from its tip
+ * to the line joining its barbs. Trim a stroke by this much and its cap ends up inside the
+ * head rather than poking out in front of the tip.
+ */
+export function arrowHeadDepth(size = 10, spread = ARROW_HEAD_SPREAD): number {
+  return clamp(size, 2, 200) * Math.cos(spread);
 }

@@ -38,13 +38,28 @@ defineComponent({
       });
     } else pts = route.orthogonal(a.pos, b.pos, opts);
 
-    var d =
-      style === 'curve'
-        ? geometry.smoothPath(pts)
-        : geometry.polylinePath(pts, p.radius === undefined ? 6 : p.radius);
-
     var stroke = p.stroke || 'var(--sw-ink)';
     var width = p.strokeWidth || 1.6;
+    var headSize = 9 + width;
+    var endHead = p.arrow !== false && pts.length > 1;
+    var startHead = !!p.startArrow && pts.length > 1;
+
+    // The stroke stops at each arrowhead's base. Drawn all the way to the tip its round cap
+    // would stick half a stroke width past the point, which reads as the line overshooting
+    // the head. `pts` stays untrimmed: that is the route the editor hit-tests and edits.
+    var drawn =
+      startHead || endHead
+        ? geometry.trimPolyline(
+            pts,
+            startHead ? route.arrowHeadDepth(headSize) : 0,
+            endHead ? route.arrowHeadDepth(headSize) : 0,
+          )
+        : pts;
+
+    var d =
+      style === 'curve'
+        ? geometry.smoothPath(drawn)
+        : geometry.polylinePath(drawn, p.radius === undefined ? 6 : p.radius);
 
     var children = [
       svg.path({
@@ -59,17 +74,17 @@ defineComponent({
       }),
     ];
 
-    if (p.arrow !== false && pts.length > 1) {
+    if (endHead) {
       children.push(
         svg.polygon({
-          points: pointsAttr(route.arrowHead(pts[pts.length - 1], pts[pts.length - 2], 9 + width)),
+          points: pointsAttr(route.arrowHead(pts[pts.length - 1], pts[pts.length - 2], headSize)),
           fill: stroke,
         }),
       );
     }
-    if (p.startArrow) {
+    if (startHead) {
       children.push(
-        svg.polygon({ points: pointsAttr(route.arrowHead(pts[0], pts[1], 9 + width)), fill: stroke }),
+        svg.polygon({ points: pointsAttr(route.arrowHead(pts[0], pts[1], headSize)), fill: stroke }),
       );
     }
     if (p.label) {
