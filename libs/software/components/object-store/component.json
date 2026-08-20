@@ -42,6 +42,14 @@
       "min": 6
     },
     {
+      "name": "iconSize",
+      "type": "number",
+      "label": "Icon size",
+      "default": 0,
+      "min": 0,
+      "step": 1
+    },
+    {
       "name": "iconStroke",
       "type": "number",
       "label": "Icon weight",

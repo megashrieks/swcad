@@ -49,6 +49,7 @@ defineComponent({
     var subtitle = String(pick(p.subtitle, ''));
     var showIcon = p.showIcon === undefined ? true : Boolean(p.showIcon);
     var iconStroke = Math.max(0.2, numOr(p.iconStroke, 1.8));
+    var iconSize = Math.max(0, numOr(p.iconSize, 0));
 
     var subSize = Math.max(7, titleSize - 3);
     var pad = 6;
@@ -62,8 +63,14 @@ defineComponent({
     // It is not capped at the authored 64: these are vector outlines, so scaling
     // past 1:1 costs nothing, and a cap would make the resize grip look broken -
     // dragging the box out would add padding and leave the symbol the same size.
+    //
+    // `iconSize` says the number outright, for when the box is the wrong handle:
+    // two symbols read as a pair when their glyphs match, and getting there by
+    // resizing means matching two boxes whose captions are different lengths and
+    // so take different amounts of room. An explicit size is used as given, and
+    // the box below grows to hold it rather than clipping it back.
     var room = Math.min(w - pad * 2, h - pad * 2 - textH - (textH > 0 ? gap : 0));
-    var glyph = showIcon ? Math.max(0, room) : 0;
+    var glyph = showIcon ? (iconSize > 0 ? iconSize : Math.max(0, room)) : 0;
     if (!(glyph >= 12)) glyph = 0;
 
     var contentH = glyph + (glyph > 0 && textH > 0 ? gap : 0) + textH;
@@ -84,8 +91,14 @@ defineComponent({
     // glyph could not use slid the whole symbol sideways - dragging the resize
     // grip past the point where it stops having an effect would walk the
     // component across the sheet instead of doing nothing.
-    var boxW = Math.min(w, contentW + pad * 2);
-    var boxH = Math.min(h, contentH + pad * 2);
+    //
+    // A glyph sized by hand is not capped by the box: the number is the promise,
+    // and clipping it back to whatever room the instance happens to have would
+    // make two symbols set to the same size come out different again.
+    var naturalW = contentW + pad * 2;
+    var naturalH = contentH + pad * 2;
+    var boxW = iconSize > 0 ? naturalW : Math.min(w, naturalW);
+    var boxH = iconSize > 0 ? naturalH : Math.min(h, naturalH);
     var boxX = 0;
     var boxY = 0;
     var mid = boxX + boxW / 2;
