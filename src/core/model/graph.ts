@@ -514,7 +514,6 @@ export class GraphEngine {
   }
 
   private scriptApi(entry: ComponentEntry, logs: string[]): Record<string, unknown> {
-    const registry = this.registry;
     return {
       svg: svgBuilder,
       geometry: Object.freeze({ ...geometryApi }),
@@ -539,17 +538,37 @@ export class GraphEngine {
           }),
         arrowHead,
       }),
-      require: (name: string) => {
-        const [libId, mod] = name.includes(':') ? name.split(':') : [entry.libId, name];
-        const source = registry.sharedSource(libId === 'lib' ? entry.libId : libId, mod);
-        if (!source) throw new Error(`shared module '${name}' not found`);
-        const compiled = compileScript(source, {
-          api: { svg: svgBuilder, geometry: geometryApi },
-          onLog: (level, args) => logs.push(`[${level}] ${args.map(String).join(' ')}`),
-        });
-        if (compiled.error) throw new Error(compiled.error);
-        return compiled.module;
-      },
+      require: this.makeRequire(entry.libId, logs, new Set()),
+    };
+  }
+
+  /**
+   * `require` for a script, and for the shared modules it pulls in. A shared module gets one
+   * too, so a helper can be built out of other helpers; `lib:` inside it means *its* library,
+   * not the library of whatever component started the chain. `seen` breaks require cycles,
+   * which would otherwise recurse until the stack ran out.
+   */
+  private makeRequire(libId: string, logs: string[], seen: ReadonlySet<string>): (name: string) => unknown {
+    const registry = this.registry;
+    return (name: string) => {
+      const [rawLib, mod] = name.includes(':') ? name.split(':') : [libId, name];
+      const targetLib = rawLib === 'lib' ? libId : rawLib;
+      const key = `${targetLib}:${mod}`;
+      if (seen.has(key)) throw new Error(`shared module '${key}' requires itself`);
+      const source = registry.sharedSource(targetLib, mod);
+      if (!source) throw new Error(`shared module '${name}' not found`);
+      const next = new Set(seen);
+      next.add(key);
+      const compiled = compileScript(source, {
+        api: {
+          svg: svgBuilder,
+          geometry: geometryApi,
+          require: this.makeRequire(targetLib, logs, next),
+        },
+        onLog: (level, args) => logs.push(`[${level}] ${args.map(String).join(' ')}`),
+      });
+      if (compiled.error) throw new Error(compiled.error);
+      return compiled.module;
     };
   }
 

@@ -326,27 +326,72 @@ interface PathCommand {
 /**
  * Splits path data into commands, expanding repeated argument sets (`L 1 2 3 4`) and the
  * implicit lineto that follows a moveto (`M 1 2 3 4` = `M 1 2 L 3 4`).
+ *
+ * Scanned character by character rather than tokenised with one number pattern, because an
+ * arc's two flags are single digits that need no separator: `a1 1 0 011 1` is seven
+ * arguments, not five. Optimisers emit that form routinely, and reading `011` as one number
+ * throws the rest of the path out.
  */
 function parsePathCommands(d: string): PathCommand[] {
-  const tokens = d.match(/[MmLlHhVvCcSsQqTtAaZz]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi);
-  if (!tokens) return [];
   const out: PathCommand[] = [];
+  const n = d.length;
   let cmd = '';
   let i = 0;
-  while (i < tokens.length) {
-    const token = tokens[i];
-    if (/[a-z]/i.test(token)) {
-      cmd = token;
+
+  const skipSep = (): void => {
+    while (i < n && (d[i] === ' ' || d[i] === ',' || d[i] === '\t' || d[i] === '\n' || d[i] === '\r')) i += 1;
+  };
+
+  const readNumber = (): number | null => {
+    skipSep();
+    const start = i;
+    if (i < n && (d[i] === '+' || d[i] === '-')) i += 1;
+    while (i < n && d[i] >= '0' && d[i] <= '9') i += 1;
+    if (i < n && d[i] === '.') {
       i += 1;
-      if (cmd.toUpperCase() === 'Z') out.push({ cmd, args: [] });
+      while (i < n && d[i] >= '0' && d[i] <= '9') i += 1;
+    }
+    if (i < n && (d[i] === 'e' || d[i] === 'E')) {
+      const mark = i;
+      i += 1;
+      if (i < n && (d[i] === '+' || d[i] === '-')) i += 1;
+      if (i < n && d[i] >= '0' && d[i] <= '9') while (i < n && d[i] >= '0' && d[i] <= '9') i += 1;
+      else i = mark;
+    }
+    if (i === start) return null;
+    const value = Number(d.slice(start, i));
+    return Number.isFinite(value) ? value : null;
+  };
+
+  const readFlag = (): number | null => {
+    skipSep();
+    if (i < n && (d[i] === '0' || d[i] === '1')) {
+      const value = d[i] === '1' ? 1 : 0;
+      i += 1;
+      return value;
+    }
+    return null;
+  };
+
+  while (i < n) {
+    skipSep();
+    if (i >= n) break;
+    if (/[MmLlHhVvCcSsQqTtAaZz]/.test(d[i])) {
+      cmd = d[i];
+      i += 1;
+      if (cmd === 'Z' || cmd === 'z') out.push({ cmd, args: [] });
       continue;
     }
     if (!cmd) return out;
     const count = PATH_ARG_COUNTS[cmd.toUpperCase()];
     if (!count) return out;
+    const arc = cmd === 'A' || cmd === 'a';
     const args: number[] = [];
-    for (let k = 0; k < count && i < tokens.length; k += 1, i += 1) args.push(Number(tokens[i]));
-    if (args.length < count) break;
+    for (let k = 0; k < count; k += 1) {
+      const value = arc && (k === 3 || k === 4) ? readFlag() : readNumber();
+      if (value === null) return out;
+      args.push(value);
+    }
     out.push({ cmd, args });
     // A repeated moveto argument set is a lineto.
     if (cmd === 'M') cmd = 'L';
