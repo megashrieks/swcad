@@ -174,13 +174,15 @@ defineComponent({
     // The ring belongs to the icon, not to the label: sizing it to the whole
     // content let a long title blow it out sideways, which pushed the attach
     // points a long way from the thing they were pointing at. It is the circle
-    // inscribed in the glyph box, not the one around it - a circumscribed ring
+    // inscribed in the glyph box plus a small margin - a circumscribed ring
     // hangs a fifth of the glyph below the icon, which at these sizes is far
-    // enough into the caption for an arrow to land on the words. A connector may
-    // therefore touch a mark drawn right into the glyph's corners, which is the
-    // better of the two. A label-only symbol has no glyph to hug, so it falls
-    // back to the content box.
-    var ringR = glyph > 0 ? glyph / 2 : Math.sqrt(boxW * boxW + boxH * boxH) / 2;
+    // enough into the caption for an arrow to land on the words, while the bare
+    // inscribed one runs right along the icon's own outline on a small symbol.
+    // The margin is a flat few units rather than a fraction of the glyph, so it
+    // reads the same at every size. A label-only symbol has no glyph to hug, so
+    // it falls back to the content box.
+    var ringPad = 5;
+    var ringR = glyph > 0 ? glyph / 2 + ringPad : Math.sqrt(boxW * boxW + boxH * boxH) / 2;
     var ringY = glyph > 0 ? top + glyph / 2 : boxY + boxH / 2;
     children.push(
       svg.circle({
@@ -195,9 +197,9 @@ defineComponent({
 
     // The resize grip. The editor draws the square itself for a selected node, so this only
     // has to say where: the bottom-right of the hit box. That corner tracks the pointer 1:1
-    // on a diagonal drag, which the connect ring's corner does not - the ring is the glyph's
-    // circumscribed circle, so it grows half a diagonal per side and runs ahead of the
-    // cursor. It is a zero-radius point, so saying so adds nothing to the bounds.
+    // on a diagonal drag, which the connect ring's does not - the ring is a function of the
+    // glyph, so it grows by half a diagonal per side and runs ahead of the cursor. It is a
+    // zero-radius point, so saying so adds nothing to the bounds.
     children.push(
       svg.circle({
         id: 'grip',
