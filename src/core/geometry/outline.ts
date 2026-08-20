@@ -61,10 +61,10 @@ function segments(o: { points: Vec[]; closed: boolean }): [Vec, Vec][] {
  * the point on the stroke nearest the incoming end. Falls back to the centre only when
  * the direction is degenerate.
  *
- * With a `grid`, a point that landed on a straight run of the outline slides along that
- * run onto the nearest grid line. A whole line annotated as a port is otherwise met at
- * whatever spot the geometry works out to, and a connector leaving it — perpendicular to
- * the line, so along the free axis' partner — would start off-lattice and stay there.
+ * With a `grid`, the point slides along the outline onto the nearest grid line: along the
+ * straight run it landed on, or, on an ellipse, along the curve. A shape annotated as a
+ * port is otherwise met at whatever spot the geometry works out to, and a connector
+ * leaving it would start off-lattice and stay there.
  */
 export function outlineAttach(o: Outline, toward: Vec, grid?: AttachGrid): { pos: Vec; facing: Vec } {
   const hit = attachPoint(o, toward);
@@ -119,13 +119,14 @@ function attachPoint(o: Outline, toward: Vec): { pos: Vec; facing: Vec } {
  * Only the run carrying the point is considered, so the connector still meets the edge it
  * was aimed at, and the move is capped at `SNAP_REACH` steps: the nearest lattice line is
  * always within half a step along an axis-aligned run, and a diagonal one reaches a little
- * further. A curve has no straight run to slide along and is left alone — an ellipse
- * outright, and a flattened arc because its segments are far shorter than a grid step, so
- * no lattice line falls inside the one it hit.
+ * further. A flattened arc is left alone, because its segments are far shorter than a grid
+ * step, so no lattice line falls inside the one it hit — a real ellipse is handled by the
+ * curve of its own.
  */
 function snapAlong(o: Outline, hit: { pos: Vec; facing: Vec }, grid: AttachGrid): { pos: Vec; facing: Vec } {
   const step = grid.step;
-  if (!(step > 0) || o.kind === 'ellipse') return hit;
+  if (!(step > 0)) return hit;
+  if (o.kind === 'ellipse') return snapAlongEllipse(o, hit, grid);
   const run = runAt(o, hit.pos);
   if (!run) return hit;
   const [a, b] = run;
@@ -156,6 +157,78 @@ function snapAlong(o: Outline, hit: { pos: Vec; facing: Vec }, grid: AttachGrid)
     for (const g of [Math.floor(k), Math.ceil(k)]) consider((origin.y + g * step - a.y) / ey);
   }
   return best ? { pos: best, facing: hit.facing } : hit;
+}
+
+/** A point on an ellipse at parameter `t`, with the outward normal there. */
+function ellipsePoint(o: Extract<Outline, { kind: 'ellipse' }>, t: number): { pos: Vec; facing: Vec } {
+  const rx = Math.max(o.rx, EPS);
+  const ry = Math.max(o.ry, EPS);
+  const p = { x: Math.cos(t) * rx, y: Math.sin(t) * ry };
+  const n = norm({ x: p.x / (rx * rx), y: p.y / (ry * ry) });
+  const world = rotate(p, o.rot);
+  return { pos: { x: o.c.x + world.x, y: o.c.y + world.y }, facing: rotate(n, o.rot) };
+}
+
+/**
+ * Slide an attach point along a curve until one of its coordinates sits on a grid line.
+ *
+ * A circle is the one port shape with no flat to slide along, and it is the common one —
+ * the software symbols wrap each icon in a ring. Sampling it by direction lands wherever
+ * the ray happens to cross, so a connector left at an angle no lattice line agrees with,
+ * and the whole route inherited that offset.
+ *
+ * Which coordinate matters is decided by the way the port faces: one facing along x departs
+ * horizontally and holds its y, so it is y that has to be on a lane. A diagonal facing holds
+ * neither and takes whichever line is nearer. The move is capped at `SNAP_REACH` steps, as
+ * on a straight run, and the normal is re-read at wherever the point ends up.
+ *
+ * Solved rather than searched: an offset from the centre is `a·cos t + b·sin t` on either
+ * axis, which is `R·cos(t − φ)`, so the parameters that put a coordinate on a given line are
+ * `φ ± acos((line − centre) / R)` — no solution when the line misses the ellipse entirely.
+ */
+function snapAlongEllipse(
+  o: Extract<Outline, { kind: 'ellipse' }>,
+  hit: { pos: Vec; facing: Vec },
+  grid: AttachGrid,
+): { pos: Vec; facing: Vec } {
+  const step = grid.step;
+  const origin = grid.origin ?? { x: 0, y: 0 };
+  const limit = step * SNAP_REACH;
+  const rx = Math.max(o.rx, EPS);
+  const ry = Math.max(o.ry, EPS);
+  const rad = (o.rot * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const coef = {
+    x: { a: rx * cos, b: -ry * sin, c: o.c.x },
+    y: { a: rx * sin, b: ry * cos, c: o.c.y },
+  };
+  const fx = Math.abs(hit.facing.x);
+  const fy = Math.abs(hit.facing.y);
+  const axes: ('x' | 'y')[] = fx > fy + EPS ? ['y'] : fy > fx + EPS ? ['x'] : ['x', 'y'];
+
+  let best: { pos: Vec; facing: Vec } | null = null;
+  let bestDist = Infinity;
+  for (const axis of axes) {
+    const { a, b, c } = coef[axis];
+    const r = Math.hypot(a, b);
+    if (r < EPS) continue;
+    const phi = Math.atan2(b, a);
+    const k = (hit.pos[axis] - origin[axis]) / step;
+    for (const g of [Math.floor(k), Math.ceil(k)]) {
+      const ratio = (origin[axis] + g * step - c) / r;
+      if (Math.abs(ratio) > 1) continue;
+      const spread = Math.acos(ratio);
+      for (const t of [phi + spread, phi - spread]) {
+        const p = ellipsePoint(o, t);
+        const d = Math.hypot(p.pos.x - hit.pos.x, p.pos.y - hit.pos.y);
+        if (d > limit || d >= bestDist) continue;
+        best = p;
+        bestDist = d;
+      }
+    }
+  }
+  return best ?? hit;
 }
 
 /** The straight run of the outline that `p` sits on. */
