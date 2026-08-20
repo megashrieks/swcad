@@ -34,6 +34,12 @@ export interface DragState {
   fromPos?: Vec;
   hoverPort?: ResolvedPortInfo | null;
   handleId?: string;
+  /**
+   * Distance from the grip to the corner of the instance box, captured when the drag starts.
+   * A grip need not sit on that corner — the software symbols put theirs on the drawing,
+   * which is inset — so without this the size would jump the moment one was grabbed.
+   */
+  sizeOffset?: Vec;
   connectionId?: string;
   waypointIndex?: number;
   moved: boolean;

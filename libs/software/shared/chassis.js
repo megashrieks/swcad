@@ -59,8 +59,11 @@ defineComponent({
 
     // The glyph takes whichever axis runs out first, so it stays square: a wide
     // node gets a big icon, and one squashed flat drops it rather than smear it.
+    // It is not capped at the authored 64: these are vector outlines, so scaling
+    // past 1:1 costs nothing, and a cap would make the resize grip look broken -
+    // dragging the box out would add padding and leave the symbol the same size.
     var room = Math.min(w - pad * 2, h - pad * 2 - textH - (textH > 0 ? gap : 0));
-    var glyph = showIcon ? Math.min(room, 64) : 0;
+    var glyph = showIcon ? Math.max(0, room) : 0;
     if (!(glyph >= 12)) glyph = 0;
 
     var contentH = glyph + (glyph > 0 && textH > 0 ? gap : 0) + textH;
@@ -75,10 +78,17 @@ defineComponent({
 
     // The hit box hugs the drawn content rather than the whole instance box, so
     // selecting, grabbing and routing all treat the symbol as the size it looks.
+    //
+    // It hangs from the node's origin rather than sitting centred in the instance
+    // box. Centring looked tidier but meant that growing the box on an axis the
+    // glyph could not use slid the whole symbol sideways - dragging the resize
+    // grip past the point where it stops having an effect would walk the
+    // component across the sheet instead of doing nothing.
     var boxW = Math.min(w, contentW + pad * 2);
     var boxH = Math.min(h, contentH + pad * 2);
-    var boxX = (w - boxW) / 2;
-    var boxY = (h - boxH) / 2;
+    var boxX = 0;
+    var boxY = 0;
+    var mid = boxX + boxW / 2;
     var top = boxY + (boxH - contentH) / 2;
 
     // No body: these are symbols on the sheet, not cards. The rect is only a hit
@@ -120,7 +130,7 @@ defineComponent({
           {
             id: 'icon',
             transform:
-              'translate(' + r2((w - glyph) / 2) + ' ' + r2(top) + ') scale(' + Math.round(scale * 1e4) / 1e4 + ')',
+              'translate(' + r2(mid - glyph / 2) + ' ' + r2(top) + ') scale(' + Math.round(scale * 1e4) / 1e4 + ')',
           },
           marks,
         ),
@@ -132,7 +142,7 @@ defineComponent({
       children.push(
         svg.text(title, {
           id: 'title',
-          x: r2(w / 2),
+          x: r2(mid),
           y: r2(textTop + titleSize * 0.86),
           'text-anchor': 'middle',
           'font-family': FONT,
@@ -146,7 +156,7 @@ defineComponent({
       children.push(
         svg.text(subtitle, {
           id: 'subtitle',
-          x: r2(w / 2),
+          x: r2(mid),
           y: r2(textTop + titleH + subSize * 0.95),
           'text-anchor': 'middle',
           'font-family': FONT,
@@ -163,20 +173,39 @@ defineComponent({
     //
     // The ring belongs to the icon, not to the label: sizing it to the whole
     // content let a long title blow it out sideways, which pushed the attach
-    // points a long way from the thing they were pointing at. The radius is the
-    // glyph box's half-diagonal, the smallest circle that cannot cross the icon
-    // whatever shape it is. A label-only symbol has no glyph to hug, so it falls
+    // points a long way from the thing they were pointing at. It is the circle
+    // inscribed in the glyph box, not the one around it - a circumscribed ring
+    // hangs a fifth of the glyph below the icon, which at these sizes is far
+    // enough into the caption for an arrow to land on the words. A connector may
+    // therefore touch a mark drawn right into the glyph's corners, which is the
+    // better of the two. A label-only symbol has no glyph to hug, so it falls
     // back to the content box.
-    var ringR = glyph > 0 ? (glyph * Math.SQRT2) / 2 : Math.sqrt(boxW * boxW + boxH * boxH) / 2;
-    var ringY = glyph > 0 ? top + glyph / 2 : h / 2;
+    var ringR = glyph > 0 ? glyph / 2 : Math.sqrt(boxW * boxW + boxH * boxH) / 2;
+    var ringY = glyph > 0 ? top + glyph / 2 : boxY + boxH / 2;
     children.push(
       svg.circle({
         id: 'edge',
-        cx: r2(w / 2),
+        cx: r2(mid),
         cy: r2(ringY),
         r: r2(ringR),
         fill: 'none',
         stroke: 'transparent',
+      }),
+    );
+
+    // The resize grip. The editor draws the square itself for a selected node, so this only
+    // has to say where: the bottom-right of the hit box. That corner tracks the pointer 1:1
+    // on a diagonal drag, which the connect ring's corner does not - the ring is the glyph's
+    // circumscribed circle, so it grows half a diagonal per side and runs ahead of the
+    // cursor. It is a zero-radius point, so saying so adds nothing to the bounds.
+    children.push(
+      svg.circle({
+        id: 'grip',
+        cx: r2(boxX + boxW),
+        cy: r2(boxY + boxH),
+        r: 0,
+        fill: 'none',
+        stroke: 'none',
       }),
     );
 

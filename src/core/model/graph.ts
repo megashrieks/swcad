@@ -1502,6 +1502,19 @@ function collectFromScript(
       else resolved.anchors.push(value);
     } else if (ann.kind === 'label') {
       resolved.labelBoxes[elId] = transformedBounds(resolved.effective, elementBounds(element));
+    } else if (ann.kind === 'handle') {
+      const idx = resolved.handles.findIndex((h) => h.id === elId);
+      const value: ResolvedHandleInfo = {
+        id: elId,
+        nodeId,
+        pos: local(point),
+        drives: ann.drives ?? [],
+        axis: ann.axis ?? 'both',
+        ...(ann.min !== undefined ? { min: ann.min } : {}),
+        ...(ann.max !== undefined ? { max: ann.max } : {}),
+      };
+      if (idx >= 0) resolved.handles[idx] = value;
+      else resolved.handles.push(value);
     }
   }
 }

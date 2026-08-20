@@ -284,6 +284,8 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
 
     const handle = controller.handleAt(world);
     if (handle && controller.tool === 'select') {
+      const info = graph.nodes.get(handle.nodeId);
+      const grip = info?.handles.find((h) => h.id === handle.handleId);
       beginDrag({
         kind: 'resize',
         start: world,
@@ -291,6 +293,13 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
         nodeIds: [handle.nodeId],
         origin: originsFor([handle.nodeId]),
         handleId: handle.handleId,
+        sizeOffset:
+          info && grip
+            ? {
+                x: info.node.size.w - (grip.pos.x - info.effective.x),
+                y: info.node.size.h - (grip.pos.y - info.effective.y),
+              }
+            : { x: 0, y: 0 },
         moved: false,
       });
       return;
@@ -417,8 +426,9 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
       const info = graph.nodes.get(id);
       if (origin && info) {
         const snapped = controller.snap(world, drag.nodeIds);
-        const w = Math.max(20, snapped.pos.x - info.effective.x);
-        const h = Math.max(20, snapped.pos.y - info.effective.y);
+        const offset = drag.sizeOffset ?? { x: 0, y: 0 };
+        const w = Math.max(20, snapped.pos.x - info.effective.x + offset.x);
+        const h = Math.max(20, snapped.pos.y - info.effective.y + offset.y);
         controller.guides = snapped.guides;
         controller.gridLines = snapped.gridLines;
         controller.store.silent(() => {

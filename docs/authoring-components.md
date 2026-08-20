@@ -471,6 +471,21 @@ Draggable point that drives one or more values.
 - `axis` — `x` | `y` | `both` | `radial`
 - `min` / `max` — clamps
 
+The grip does not have to sit on the corner of the instance box. The editor measures the gap
+between the two when the drag starts and holds it, so a component whose drawing is smaller than
+its box — the `software` symbols, whose hit box hugs the icon — can put the grip on the drawing
+and still have it track the pointer 1:1.
+
+A component that draws itself from a script should put the grip element in the script's output:
+handle geometry is re-read from what the script drew, exactly as ports, anchors and labels are.
+An id present only in the static `shape.svg` resolves against that instead and lands wherever the
+fallback put it.
+
+Two things make a scripted grip behave. Lay the drawing out from the node's origin rather than
+centred in the instance box, or growing the box along an axis the drawing cannot use will slide
+the component sideways instead of doing nothing. And do not cap how large the drawing may get —
+a cap turns the grip into a control that visibly does nothing past a certain size.
+
 ### `fill_slot`
 
 Named region a script can restyle. `style()` returns `{ slots: { <name>: { fill, stroke, … } } }`
