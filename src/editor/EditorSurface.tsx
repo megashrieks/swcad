@@ -406,7 +406,6 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
         adjustX = dx + (snapped.pos.x - target.x);
         adjustY = dy + (snapped.pos.y - target.y);
         controller.guides = snapped.guides;
-        controller.gridLines = snapped.gridLines;
       }
 
       controller.store.silent(() => {
@@ -432,7 +431,6 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
         const w = Math.max(20, snapped.pos.x - info.effective.x + offset.x);
         const h = Math.max(20, snapped.pos.y - info.effective.y + offset.y);
         controller.guides = snapped.guides;
-        controller.gridLines = snapped.gridLines;
         controller.store.silent(() => {
           controller.store.updateNode(id, { size: { w, h } });
         });
@@ -446,7 +444,6 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
       drag.hoverPort = port;
       const snapped = controller.snap(world);
       controller.guides = snapped.guides;
-      controller.gridLines = snapped.gridLines;
       controller.notify();
       return;
     }
@@ -469,7 +466,6 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
     const drag = controller.drag;
     controller.drag = null;
     controller.guides = [];
-    controller.gridLines = { x: null, y: null };
     if (!drag) {
       controller.notify();
       return;
@@ -731,8 +727,6 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
         viewport={viewport}
         size={size}
         guides={controller.guides}
-        gridLines={controller.gridLines}
-        gridSize={doc.grid.size}
         active={highlightActive}
       />
 

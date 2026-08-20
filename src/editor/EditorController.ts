@@ -48,8 +48,6 @@ export interface DragState {
 export interface SnapResult {
   pos: Vec;
   guides: Guide[];
-  /** Grid row/column highlighted for the current position. */
-  gridLines: { x: number | null; y: number | null };
 }
 
 const SNAP_TOLERANCE_PX = 7;
@@ -178,7 +176,6 @@ export class EditorController {
   onPlace: ((world: Vec, repeat: boolean) => void) | null = null;
   drag: DragState | null = null;
   guides: Guide[] = [];
-  gridLines: { x: number | null; y: number | null } = { x: null, y: null };
   snapEnabled = true;
   showPorts = true;
   /**
@@ -520,10 +517,6 @@ export class EditorController {
     return {
       pos: { x, y },
       guides,
-      gridLines: {
-        x: step > 0 ? snapTo(x, step, doc.grid.origin.x) : null,
-        y: step > 0 ? snapTo(y, step, doc.grid.origin.y) : null,
-      },
     };
   }
 

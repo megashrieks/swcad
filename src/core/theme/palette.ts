@@ -59,7 +59,6 @@ export const CHROME_TOKENS: readonly string[] = Object.freeze([
   '--sw-grid-minor',
   '--sw-grid-major',
   '--sw-grid-axis',
-  '--sw-highlight',
   '--sw-guide',
   '--sw-guide-weak',
   '--sw-frame',

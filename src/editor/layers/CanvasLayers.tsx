@@ -186,24 +186,18 @@ export function HighlightLayer({
   viewport,
   size,
   guides,
-  gridLines,
-  gridSize,
   active,
 }: {
   viewport: Viewport;
   size: Size;
   guides: Guide[];
-  gridLines: { x: number | null; y: number | null };
-  gridSize: number;
   active: boolean;
 }): JSX.Element {
   const ref = useRef<HTMLCanvasElement>(null);
   const { tx, ty, zoom } = viewport;
   const { w, h } = size;
-  const { x: gridLineX, y: gridLineY } = gridLines;
 
   const palette = useCanvasPalette();
-  const bandColor = paletteColor(palette, '--sw-highlight', 'rgba(18, 128, 146, 0.10)');
   const guideColor = paletteColor(palette, '--sw-guide', '#c07d16');
   const guideWeakColor = paletteColor(palette, '--sw-guide-weak', 'rgba(192, 125, 22, 0.35)');
 
@@ -212,17 +206,6 @@ export function HighlightLayer({
     if (!canvas) return;
     const ctx = setupCanvas(canvas, { w, h });
     if (!ctx || !active) return;
-
-    // Highlighted grid row/column under the pointer, painted first as a subtle band.
-    ctx.fillStyle = bandColor;
-    if (gridLineX !== null) {
-      const sx = gridLineX * zoom + tx;
-      ctx.fillRect(sx - (gridSize * zoom) / 2, 0, gridSize * zoom, h);
-    }
-    if (gridLineY !== null) {
-      const sy = gridLineY * zoom + ty;
-      ctx.fillRect(0, sy - (gridSize * zoom) / 2, w, gridSize * zoom);
-    }
 
     const lines = selectGuides(guides, zoom, tx, ty, w, h);
 
@@ -259,21 +242,7 @@ export function HighlightLayer({
       true,
     );
     ctx.setLineDash([]);
-  }, [
-    tx,
-    ty,
-    zoom,
-    w,
-    h,
-    guides,
-    gridLineX,
-    gridLineY,
-    gridSize,
-    active,
-    bandColor,
-    guideColor,
-    guideWeakColor,
-  ]);
+  }, [tx, ty, zoom, w, h, guides, active, guideColor, guideWeakColor]);
 
   return <canvas ref={ref} className="layer" style={{ width: w, height: h }} />;
 }

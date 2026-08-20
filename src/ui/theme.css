@@ -88,7 +88,6 @@
   --sw-grid-minor: color-mix(in srgb, var(--sw-ink) 7%, var(--sw-paper));
   --sw-grid-major: color-mix(in srgb, var(--sw-ink) 14%, var(--sw-paper));
   --sw-grid-axis: color-mix(in srgb, var(--sw-ink) 24%, var(--sw-paper));
-  --sw-highlight: color-mix(in srgb, var(--sw-accent-2) 12%, transparent);
   --sw-guide: var(--sw-warning);
   --sw-guide-weak: color-mix(in srgb, var(--sw-warning) 38%, transparent);
   --sw-frame: color-mix(in srgb, var(--sw-ink) 72%, var(--sw-paper));
