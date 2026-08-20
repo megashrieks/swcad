@@ -6,8 +6,8 @@
   "description": "Browser front end.",
   "resizable": true,
   "defaultSize": {
-    "w": 150,
-    "h": 110
+    "w": 130,
+    "h": 130
   },
   "params": [
     {
@@ -54,13 +54,6 @@
       "type": "boolean",
       "label": "Show icon",
       "default": true
-    },
-    {
-      "name": "portSize",
-      "type": "number",
-      "label": "Port size",
-      "default": 3.5,
-      "min": 0
     }
   ]
 }

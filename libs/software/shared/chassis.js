@@ -5,9 +5,10 @@
  * author twenty near-identical shapes, each component is a one-line script that
  * hands this module an icon name.
  *
- * There is no drawn body. The box is only a hit area, kept invisible, so the
- * symbols sit on the sheet as marks rather than as cards - put a base/box behind
- * one if a container is wanted.
+ * There is no drawn body and no drawn ports. A rect hugging the content is the
+ * hit area, kept invisible, and a circle around it is the connectable perimeter,
+ * so the symbols sit on the sheet as marks rather than as cards - put a base/box
+ * behind one if a container is wanted.
  *
  * It is drawn from a script rather than from a static `shape.svg` for one reason:
  * static geometry is stretched by the engine on resize, with the x and y scales
@@ -15,7 +16,7 @@
  * a wide node would smear the icon sideways. Drawing to `ctx.size` instead lets
  * the glyph keep its 1:1 aspect at any box size.
  *
- * Element ids match `annotations.json`, which is how the ports, the fill slot and
+ * Element ids match `annotations.json`, which is how the port, the hit area and
  * the editable title are attached to scripted output.
  */
 
@@ -155,14 +156,23 @@ defineComponent({
       );
     }
 
-    var portR = Math.max(0, numOr(p.portSize, 3.5));
-    var port = function (id, cx, cy) {
-      return svg.circle({ id: id, cx: r2(cx), cy: r2(cy), r: portR, fill: 'var(--sw-port)' });
-    };
-    children.push(port('p-n', w / 2, boxY));
-    children.push(port('p-e', boxX + boxW, h / 2));
-    children.push(port('p-s', w / 2, boxY + boxH));
-    children.push(port('p-w', boxX, h / 2));
+    // One port encircling the whole symbol rather than four dots: a connector
+    // lands wherever it meets the circle, so there is nothing to aim at and
+    // nothing to draw. The radius takes the content box's half-diagonal, which is
+    // the smallest circle that cannot cross the drawing - a connector never ends
+    // up sitting on the icon or in the middle of the label. The editor draws the
+    // ring itself while the connect tool is armed, so this stays transparent.
+    var portR = Math.sqrt(boxW * boxW + boxH * boxH) / 2;
+    children.push(
+      svg.circle({
+        id: 'edge',
+        cx: r2(w / 2),
+        cy: r2(h / 2),
+        r: r2(portR),
+        fill: 'none',
+        stroke: 'transparent',
+      }),
+    );
 
     return svg.g({}, children);
   },
