@@ -80,3 +80,34 @@ export function measureVertical(font: FontSpec): { ascent: number; descent: numb
   verticals.set(key, out);
   return out;
 }
+
+/**
+ * `text` as a component script sees it.
+ *
+ * A script that draws its own caption has to know how wide the words will be — to size a
+ * box around them, or to cut a gap in a line for them. Guessing an average glyph width is
+ * off by a third on anything but lowercase prose, and the guess is baked into the drawing,
+ * so the mistake is visible. This measures with the same canvas the renderer's layout does.
+ */
+export const scriptTextApi = Object.freeze({
+  measure(
+    value: unknown,
+    font?: { family?: string; size?: number; weight?: string | number; style?: string; letterSpacing?: number },
+  ): { width: number; ascent: number; descent: number; height: number } {
+    const size = Number(font?.size);
+    const spec: FontSpec = {
+      family: font?.family ?? 'Inter, Segoe UI, sans-serif',
+      size: Number.isFinite(size) && size > 0 ? size : 12,
+      weight: String(font?.weight ?? '400'),
+      style: font?.style ?? 'normal',
+      letterSpacing: Number(font?.letterSpacing) || 0,
+    };
+    const vertical = measureVertical(spec);
+    return {
+      width: measureWidth(value === undefined || value === null ? '' : String(value), spec),
+      ascent: vertical.ascent,
+      descent: vertical.descent,
+      height: vertical.ascent + vertical.descent,
+    };
+  },
+});

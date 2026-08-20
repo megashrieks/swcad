@@ -56,10 +56,59 @@ defineComponent({
           )
         : pts;
 
-    var d =
-      style === 'curve'
-        ? geometry.smoothPath(drawn)
-        : geometry.polylinePath(drawn, p.radius === undefined ? 6 : p.radius);
+    var label = p.label === undefined || p.label === null ? '' : String(p.label);
+    var labelSize = 11;
+    var labelAt = null;
+    // The label is not written on a plate over the line — the line steps aside for it. The
+    // stroke is cut where the text sits, so the words read against the sheet itself and the
+    // connector keeps whatever is behind it visible.
+    var parts = [drawn];
+    if (label) {
+      var font = { size: labelSize, family: 'Inter, Segoe UI, sans-serif' };
+      var ink = text.measure(label, font);
+      var total = geometry.polylineLength(drawn);
+      var midLen = total / 2;
+      labelAt = geometry.pointAtLength(drawn, midLen);
+      // Half-extents of the text, with the breathing room the old plate used to give it.
+      var halfW = ink.width / 2 + 4;
+      var halfH = ink.height / 2 + 2;
+      var back = geometry.pointAtLength(drawn, Math.max(0, midLen - 2));
+      var fwd = geometry.pointAtLength(drawn, Math.min(total, midLen + 2));
+      var dx = fwd.x - back.x;
+      var dy = fwd.y - back.y;
+      var run = Math.hypot(dx, dy);
+      // How far the gap reaches along the line: where the line leaves the text's box. A
+      // horizontal run has to clear the whole width, a vertical one only the height.
+      var reach = halfW;
+      if (run > 1e-6) {
+        dx /= run;
+        dy /= run;
+        reach = Math.min(
+          Math.abs(dx) > 1e-6 ? halfW / Math.abs(dx) : Infinity,
+          Math.abs(dy) > 1e-6 ? halfH / Math.abs(dy) : Infinity,
+        );
+      }
+      // On a run too short to lose the whole gap, keep a stub either side so it still reads
+      // as a connector rather than as two arrowheads with a word between them.
+      var maxReach = midLen - 4;
+      if (maxReach > 0) {
+        reach = Math.min(reach, maxReach);
+        parts = [
+          geometry.trimPolyline(drawn, 0, total - (midLen - reach)),
+          geometry.trimPolyline(drawn, midLen + reach, 0),
+        ];
+      }
+    }
+
+    // Both sides are subpaths of one `d`, so the connector stays a single element to
+    // hit-test and the route handed back to the editor is still the whole route.
+    var d = parts
+      .map(function (part) {
+        return style === 'curve'
+          ? geometry.smoothPath(part)
+          : geometry.polylinePath(part, p.radius === undefined ? 6 : p.radius);
+      })
+      .join(' ');
 
     var children = [
       svg.path({
@@ -87,25 +136,13 @@ defineComponent({
         svg.polygon({ points: pointsAttr(route.arrowHead(pts[0], pts[1], headSize)), fill: stroke }),
       );
     }
-    if (p.label) {
-      var mid = geometry.pointAtLength(pts, geometry.polylineLength(pts) / 2);
+    if (labelAt) {
       children.push(
-        svg.rect({
-          x: mid.x - String(p.label).length * 3.4 - 4,
-          y: mid.y - 9,
-          width: String(p.label).length * 6.8 + 8,
-          height: 16,
-          rx: 3,
-          fill: 'var(--sw-surface)',
-          'fill-opacity': 0.9,
-        }),
-      );
-      children.push(
-        svg.text(String(p.label), {
-          x: mid.x,
-          y: mid.y + 3,
+        svg.text(label, {
+          x: labelAt.x,
+          y: labelAt.y + labelSize * 0.35,
           'text-anchor': 'middle',
-          'font-size': 11,
+          'font-size': labelSize,
           'font-family': 'Inter, Segoe UI, sans-serif',
           fill: stroke,
         }),

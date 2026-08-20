@@ -31,7 +31,7 @@ import {
 } from '../script/svg';
 import { AlignmentIndex, SpatialHash } from '../spatial/index';
 import { layoutMarkdown, markdownBounds, markdownChildren, type TextStyle } from '../text/markdown';
-import { measureWidth, type FontSpec } from '../text/measure';
+import { measureWidth, scriptTextApi, type FontSpec } from '../text/measure';
 import { resolveAnnotations } from './annotations';
 import { resolveBinding } from './bind';
 import type { DocumentStore, Change } from './store';
@@ -526,6 +526,7 @@ export class GraphEngine {
     return {
       svg: svgBuilder,
       geometry: Object.freeze({ ...geometryApi }),
+      text: scriptTextApi,
       route: Object.freeze({
         orthogonal: (a: Vec, b: Vec, opts: Record<string, unknown> = {}) =>
           routeBetween({ pos: a, facing: opts.fromFacing as Vec }, { pos: b, facing: opts.toFacing as Vec }, {
@@ -573,6 +574,7 @@ export class GraphEngine {
         api: {
           svg: svgBuilder,
           geometry: geometryApi,
+          text: scriptTextApi,
           require: this.makeRequire(targetLib, logs, next),
         },
         onLog: (level, args) => logs.push(`[${level}] ${args.map(String).join(' ')}`),

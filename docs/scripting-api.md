@@ -35,6 +35,7 @@ work without going through `ctx`:
 | `svg` | the virtual-node builder |
 | `geometry` | vector/rect/path maths |
 | `route` | routing helpers |
+| `text` | text measurement |
 | `require(name)` | load a `shared/` module |
 
 Every hook has a wall-clock budget; overruns and thrown errors are captured and surfaced in the
@@ -139,6 +140,20 @@ engine fills it in automatically from the sheet grid whenever snapping is on (`g
 follows the grid origin), so scripts get grid-aligned routes for free — pass `grid: 0` to opt
 out. When no grid-aligned route exists, the search falls back to the obstacle lattice.
 
+## `text`
+
+`text.measure(value, font)` → `{ width, ascent, descent, height }`, where `font` is
+`{ family, size, weight, style, letterSpacing }` and every field is optional (the defaults are
+the sheet's own 12px sans). The width is the advance width the browser will actually paint,
+measured on a canvas with the same font string the renderer uses, so a box drawn around the
+result fits the drawn glyphs.
+
+Measure rather than estimate. An average glyph width is out by a third on anything but
+lowercase prose, and unlike a CSS layout the mistake is baked into the geometry: a plate sized
+by guesswork is visibly too wide on `WWW` and clips `illicit`. The arrow uses this to decide
+how much of itself to erase behind its label. Headless (no DOM) the call falls back to the
+estimate, which is fine because nothing is being looked at.
+
 ## `require`
 
 `require('lib:style')` loads `shared/style.js` from the component's own library;
@@ -146,7 +161,7 @@ out. When no grid-aligned route exists, the search falls back to the obstacle la
 
 A shared module is compiled by the same sandbox as a component, so it **exports by calling
 `defineComponent`** — there is no `module` or `exports` binding. Whatever object it passes is what
-`require` returns, and it gets `svg`, `geometry`, `route` and `require` in scope:
+`require` returns, and it gets `svg`, `geometry`, `text` and `require` in scope:
 
 ```js
 // libs/base/shared/style.js
