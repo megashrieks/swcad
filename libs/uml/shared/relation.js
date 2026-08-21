@@ -16,7 +16,35 @@
 var t = require('lib:theme');
 
 /** How far along the line an end decoration reaches, per unit of head size. */
-var DEPTH = { triangle: 1.0, diamond: 1.7, filled: 1.0, open: 0, none: 0, ball: 0, socket: 0 };
+var DEPTH = {
+  triangle: 1.0,
+  diamond: 1.7,
+  'filled-diamond': 1.7,
+  filled: 1.0,
+  open: 0,
+  none: 0,
+  ball: 0,
+  socket: 0,
+};
+
+/**
+ * How much of the line an end decoration actually covers, per unit of head size.
+ *
+ * Not the same thing as `DEPTH`, which says where the *stroke* has to stop: an open arrow
+ * head is two strokes the line runs right into, so it trims nothing while still sitting on
+ * the last stretch of the line. A label has to clear the ink, so it measures with this.
+ */
+var REACH = {
+  triangle: 1.0,
+  diamond: 1.7,
+  'filled-diamond': 1.7,
+  filled: 1.0,
+  open: 1.0,
+  ball: 0.9,
+  socket: 0.7,
+  cross: 0.6,
+  none: 0,
+};
 
 function unit(from, to) {
   var dx = to.x - from.x;
@@ -168,15 +196,30 @@ function beside(value, pos, dir, side, gap, size, stroke) {
   if (!value) return null;
   var n = { x: -dir.y, y: dir.x };
   var vertical = Math.abs(dir.y) > Math.abs(dir.x);
-  // Along a vertical run the text hangs off to one side and its baseline is level with the
-  // anchor; along a horizontal one it sits above or below and has to clear the ascenders.
-  var off = vertical ? gap + 2 : gap + (side < 0 ? 0 : size * 0.8);
-  var x = pos.x + n.x * off * side;
-  var y = pos.y + n.y * off * side + (vertical ? size * 0.33 : 0);
+  // Which way the text is pushed off the stroke. `side` alone does not say: it is read
+  // against the direction the line is travelling, and the two ends of a connector travel
+  // opposite ways, so the same `side` lands above the line at one end and below it at the
+  // other. What the layout needs to know is the sign of the displacement itself.
+  var ox = n.x * side;
+  var oy = n.y * side;
+  var x;
+  var y;
+  if (vertical) {
+    // Along a vertical run the text hangs off to one side and its baseline is level with
+    // the anchor.
+    x = pos.x + ox * (gap + 2);
+    y = pos.y + oy * (gap + 2) + size * 0.33;
+  } else {
+    // Along a horizontal one it sits above or below; text under the line starts at its
+    // baseline and has to be pushed down by its own cap height to clear the stroke.
+    var off = gap + (oy < 0 ? 0 : size * 0.8);
+    x = pos.x + ox * off;
+    y = pos.y + oy * off;
+  }
   return svg.text(String(value), {
     x: t.r2(x),
     y: t.r2(y),
-    'text-anchor': vertical ? (n.x * side > 0 ? 'start' : 'end') : 'middle',
+    'text-anchor': vertical ? (ox > 0 ? 'start' : 'end') : 'middle',
     'font-family': t.FONT,
     'font-size': size,
     fill: stroke,
@@ -273,17 +316,28 @@ function render(ctx, route, spec) {
   // reader tells `0..*` (how many) from `owner` (what it is called) without either being
   // labelled.
   var ends = [
-    { at: pts[0], toward: pts[1], mult: p.sourceMultiplicity, role: p.sourceRole },
-    { at: pts[pts.length - 1], toward: pts[pts.length - 2], mult: p.targetMultiplicity, role: p.targetRole },
+    { at: pts[0], toward: pts[1], kind: startKind, mult: p.sourceMultiplicity, role: p.sourceRole },
+    { at: pts[pts.length - 1], toward: pts[pts.length - 2], kind: endKind, mult: p.targetMultiplicity, role: p.targetRole },
   ];
   for (var e = 0; e < ends.length; e += 1) {
     var end = ends[e];
     if (!end.at || !end.toward) continue;
     if (!end.mult && !end.role) continue;
     var away = unit(end.at, end.toward);
-    var back = Math.max(size * (DEPTH[e === 0 ? startKind : endKind] || 0) + 8, 14);
+    // The way the line *travels* here, which at the source is `away` and at the target is
+    // back along it. Measuring both ends against the same direction is what keeps the
+    // multiplicities on one side of the connector and the roles on the other, instead of
+    // the pair swapping over at the far end.
+    var along = e === 0 ? away : { x: -away.x, y: -away.y };
+    // Set clear of the head. A centred label reaches back towards the tip by half its own
+    // width, so that is part of the distance; along a vertical run it hangs off to the side
+    // instead and only its cap height is in the way.
+    var vertical = Math.abs(along.y) > Math.abs(along.x);
+    var half = vertical
+      ? labelSize * 0.5
+      : Math.max(t.widthOf(String(end.mult || ''), labelSize, {}), t.widthOf(String(end.role || ''), labelSize, {})) / 2;
+    var back = Math.max(size * (REACH[end.kind] || 0) + 4 + half, 14);
     var anchor = { x: end.at.x + away.x * back, y: end.at.y + away.y * back };
-    var along = { x: -away.x, y: -away.y };
     children.push(beside(end.mult, anchor, along, -1, 3, labelSize, stroke));
     children.push(beside(end.role, anchor, along, 1, 3, labelSize, stroke));
   }
