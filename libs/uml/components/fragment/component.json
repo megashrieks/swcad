@@ -1,0 +1,84 @@
+{
+  "id": "fragment",
+  "name": "Combined fragment",
+  "version": "1.0.0",
+  "category": "behaviour",
+  "description": "An interaction operator over part of a sequence diagram. Each line of Operands adds a dashed divider with its own guard.",
+  "defaultSize": {
+    "w": 280,
+    "h": 170
+  },
+  "params": [
+    {
+      "name": "kind",
+      "type": "enum",
+      "label": "Operator",
+      "default": "alt",
+      "options": [
+        "alt",
+        "opt",
+        "loop",
+        "par",
+        "break",
+        "critical",
+        "seq",
+        "strict",
+        "neg",
+        "assert",
+        "ref"
+      ]
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "default": ""
+    },
+    {
+      "name": "guard",
+      "type": "string",
+      "label": "Guard",
+      "default": "condition"
+    },
+    {
+      "name": "operands",
+      "type": "string",
+      "label": "Operands",
+      "default": "else",
+      "multiline": true
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "none"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

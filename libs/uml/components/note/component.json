@@ -1,0 +1,53 @@
+{
+  "id": "note",
+  "name": "Note",
+  "version": "1.0.0",
+  "category": "annotation",
+  "description": "A comment with the corner turned down. Attach it with a dependency.",
+  "defaultSize": {
+    "w": 170,
+    "h": 56
+  },
+  "params": [
+    {
+      "name": "text",
+      "type": "string",
+      "label": "Text",
+      "default": "A comment",
+      "multiline": true
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "var(--sw-surface)"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

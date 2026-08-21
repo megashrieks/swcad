@@ -1,0 +1,52 @@
+{
+  "id": "send-signal",
+  "name": "Send signal",
+  "version": "1.0.0",
+  "category": "behaviour",
+  "description": "The convex pentagon of an action that sends a signal out.",
+  "defaultSize": {
+    "w": 120,
+    "h": 34
+  },
+  "params": [
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "default": "Notify"
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "var(--sw-surface)"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "id": "boundary",
+  "name": "System boundary",
+  "version": "1.0.0",
+  "category": "behaviour",
+  "description": "The rectangle a use case diagram draws around the system, named along the top.",
+  "defaultSize": {
+    "w": 280,
+    "h": 220
+  },
+  "params": [
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "default": "System"
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "none"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

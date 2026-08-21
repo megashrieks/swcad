@@ -1,0 +1,171 @@
+{
+  "id": "association",
+  "name": "Association",
+  "version": "1.0.0",
+  "category": "relationships",
+  "description": "A structural link between two classifiers. Add roles and multiplicities at the ends.",
+  "connector": true,
+  "resizable": false,
+  "params": [
+    {
+      "name": "style",
+      "type": "enum",
+      "label": "Routing",
+      "default": "orthogonal",
+      "options": [
+        "orthogonal",
+        "straight",
+        "curve"
+      ]
+    },
+    {
+      "name": "startEnd",
+      "type": "enum",
+      "label": "Source end",
+      "default": "none",
+      "options": [
+        "none",
+        "open",
+        "filled",
+        "triangle",
+        "diamond",
+        "filled-diamond",
+        "cross",
+        "ball",
+        "socket"
+      ]
+    },
+    {
+      "name": "endEnd",
+      "type": "enum",
+      "label": "Target end",
+      "default": "none",
+      "options": [
+        "none",
+        "open",
+        "filled",
+        "triangle",
+        "diamond",
+        "filled-diamond",
+        "cross",
+        "ball",
+        "socket"
+      ]
+    },
+    {
+      "name": "dashed",
+      "type": "boolean",
+      "label": "Dashed",
+      "default": false
+    },
+    {
+      "name": "label",
+      "type": "string",
+      "label": "Name",
+      "default": ""
+    },
+    {
+      "name": "stereotype",
+      "type": "string",
+      "label": "Stereotype",
+      "default": ""
+    },
+    {
+      "name": "labelSize",
+      "type": "number",
+      "label": "Label size",
+      "default": 9,
+      "min": 5,
+      "max": 24,
+      "step": 0.5
+    },
+    {
+      "name": "sourceRole",
+      "type": "string",
+      "label": "Source role",
+      "default": ""
+    },
+    {
+      "name": "sourceMultiplicity",
+      "type": "string",
+      "label": "Source multiplicity",
+      "default": ""
+    },
+    {
+      "name": "targetRole",
+      "type": "string",
+      "label": "Target role",
+      "default": ""
+    },
+    {
+      "name": "targetMultiplicity",
+      "type": "string",
+      "label": "Target multiplicity",
+      "default": ""
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "strokeWidth",
+      "type": "number",
+      "label": "Width",
+      "default": 1.4,
+      "min": 0.5,
+      "max": 8,
+      "step": 0.1
+    },
+    {
+      "name": "radius",
+      "type": "number",
+      "label": "Corner radius",
+      "default": 6,
+      "min": 0,
+      "max": 40
+    },
+    {
+      "name": "avoid",
+      "type": "boolean",
+      "label": "Avoid components",
+      "default": true
+    },
+    {
+      "name": "router",
+      "type": "enum",
+      "label": "Router",
+      "default": "auto",
+      "options": [
+        "auto",
+        "simple"
+      ]
+    },
+    {
+      "name": "bendPenalty",
+      "type": "number",
+      "label": "Bend cost",
+      "default": 0,
+      "min": 0,
+      "max": 200,
+      "step": 5
+    },
+    {
+      "name": "stub",
+      "type": "number",
+      "label": "Lead-in",
+      "default": 18,
+      "min": 0,
+      "max": 80
+    },
+    {
+      "name": "clearance",
+      "type": "number",
+      "label": "Clearance",
+      "default": 10,
+      "min": 0,
+      "max": 80
+    }
+  ]
+}

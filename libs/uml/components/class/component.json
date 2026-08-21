@@ -1,0 +1,78 @@
+{
+  "id": "class",
+  "name": "Class",
+  "version": "1.0.0",
+  "category": "structure",
+  "description": "A classifier with an attribute compartment and an operation compartment. One member per line.",
+  "defaultSize": {
+    "w": 180,
+    "h": 120
+  },
+  "params": [
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "default": "Class"
+    },
+    {
+      "name": "stereotype",
+      "type": "string",
+      "label": "Stereotype",
+      "default": ""
+    },
+    {
+      "name": "abstract",
+      "type": "boolean",
+      "label": "Abstract",
+      "default": false
+    },
+    {
+      "name": "attributes",
+      "type": "string",
+      "label": "Attributes",
+      "default": "+ id: UUID\n+ name: String",
+      "multiline": true
+    },
+    {
+      "name": "operations",
+      "type": "string",
+      "label": "Operations",
+      "default": "+ rename(name: String): void",
+      "multiline": true
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "var(--sw-surface)"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

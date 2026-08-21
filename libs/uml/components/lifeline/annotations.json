@@ -1,0 +1,19 @@
+{
+  "body": [
+    {
+      "kind": "hit_area"
+    }
+  ],
+  "spine": {
+    "kind": "port",
+    "name": "edge",
+    "direction": "inout",
+    "surface": "outline"
+  },
+  "activation": {
+    "kind": "port",
+    "name": "edge",
+    "direction": "inout",
+    "surface": "outline"
+  }
+}

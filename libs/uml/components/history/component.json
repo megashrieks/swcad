@@ -1,0 +1,52 @@
+{
+  "id": "history",
+  "name": "History",
+  "version": "1.0.0",
+  "category": "behaviour",
+  "description": "A state machine history pseudostate: shallow (H) or deep (H*).",
+  "defaultSize": {
+    "w": 26,
+    "h": 26
+  },
+  "params": [
+    {
+      "name": "deep",
+      "type": "boolean",
+      "label": "Deep",
+      "default": false
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "var(--sw-surface)"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

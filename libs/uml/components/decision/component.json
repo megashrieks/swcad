@@ -1,0 +1,52 @@
+{
+  "id": "decision",
+  "name": "Decision",
+  "version": "1.0.0",
+  "category": "behaviour",
+  "description": "A diamond: a decision on the way out, a merge on the way in, a choice in a state machine.",
+  "defaultSize": {
+    "w": 44,
+    "h": 30
+  },
+  "params": [
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "default": ""
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "var(--sw-surface)"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

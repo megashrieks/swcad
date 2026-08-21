@@ -19,6 +19,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Textarea,
   cn,
 } from './pomavo';
 
@@ -51,6 +52,38 @@ export function TextField({
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
       {...rest}
+    />
+  );
+}
+
+/**
+ * The same field with room for several lines, for a value that is a list rather than a
+ * phrase — a UML class's attributes, say. It grows with what is in it up to a few lines
+ * and then scrolls, so a short list does not leave a hole in the panel and a long one
+ * does not push everything else off the bottom.
+ */
+export function TextAreaField({
+  value,
+  onChange,
+  placeholder,
+  rows = 3,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  rows?: number;
+  className?: string;
+}): JSX.Element {
+  const lines = Math.min(Math.max(value.split('\n').length, rows), 12);
+  return (
+    <Textarea
+      className={cn('input input-area', className)}
+      value={value}
+      rows={lines}
+      spellCheck={false}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
     />
   );
 }

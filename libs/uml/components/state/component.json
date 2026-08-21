@@ -1,0 +1,59 @@
+{
+  "id": "state",
+  "name": "State",
+  "version": "1.0.0",
+  "category": "behaviour",
+  "description": "A state machine state: a rounded box with a compartment for entry, do and exit behaviours.",
+  "defaultSize": {
+    "w": 150,
+    "h": 70
+  },
+  "params": [
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "default": "Idle"
+    },
+    {
+      "name": "activities",
+      "type": "string",
+      "label": "Activities",
+      "default": "entry / start()\ndo / poll()",
+      "multiline": true
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "var(--sw-surface)"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "id": "object",
+  "name": "Object",
+  "version": "1.0.0",
+  "category": "structure",
+  "description": "An instance: the underlined `name : Class` heading of an object diagram, over its slots.",
+  "defaultSize": {
+    "w": 170,
+    "h": 80
+  },
+  "params": [
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "default": "order"
+    },
+    {
+      "name": "classifier",
+      "type": "string",
+      "label": "Class",
+      "default": "Order"
+    },
+    {
+      "name": "slots",
+      "type": "string",
+      "label": "Slots",
+      "default": "id = 42\nstatus = OPEN",
+      "multiline": true
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "var(--sw-surface)"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

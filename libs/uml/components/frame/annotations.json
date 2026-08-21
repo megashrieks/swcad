@@ -1,0 +1,26 @@
+{
+  "top": {
+    "kind": "port",
+    "name": "edge",
+    "direction": "inout",
+    "surface": "outline"
+  },
+  "right": {
+    "kind": "port",
+    "name": "edge",
+    "direction": "inout",
+    "surface": "outline"
+  },
+  "bottom": {
+    "kind": "port",
+    "name": "edge",
+    "direction": "inout",
+    "surface": "outline"
+  },
+  "left": {
+    "kind": "port",
+    "name": "edge",
+    "direction": "inout",
+    "surface": "outline"
+  }
+}

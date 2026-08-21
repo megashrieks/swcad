@@ -1,0 +1,58 @@
+{
+  "id": "frame",
+  "name": "Frame",
+  "version": "1.0.0",
+  "category": "containers",
+  "description": "The UML 2 diagram frame: a border with a pentagon tag naming the kind of diagram (sd, act, stm, pkg).",
+  "defaultSize": {
+    "w": 320,
+    "h": 220
+  },
+  "params": [
+    {
+      "name": "kind",
+      "type": "string",
+      "label": "Kind",
+      "default": "sd"
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "default": "interaction"
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "none"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

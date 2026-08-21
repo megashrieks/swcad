@@ -1,0 +1,59 @@
+{
+  "id": "component",
+  "name": "Component",
+  "version": "1.0.0",
+  "category": "structure",
+  "description": "A UML 2 component: the «component» keyword and the tabbed icon in the corner.",
+  "defaultSize": {
+    "w": 180,
+    "h": 78
+  },
+  "params": [
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "default": "Component"
+    },
+    {
+      "name": "parts",
+      "type": "string",
+      "label": "Parts",
+      "default": "",
+      "multiline": true
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "var(--sw-surface)"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "id": "artifact",
+  "name": "Artifact",
+  "version": "1.0.0",
+  "category": "structure",
+  "description": "A physical piece of the system - a file, a binary, a script - with the document icon.",
+  "defaultSize": {
+    "w": 170,
+    "h": 74
+  },
+  "params": [
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "default": "service.jar"
+    },
+    {
+      "name": "contents",
+      "type": "string",
+      "label": "Contents",
+      "default": "",
+      "multiline": true
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "var(--sw-surface)"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

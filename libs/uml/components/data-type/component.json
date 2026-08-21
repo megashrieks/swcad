@@ -1,0 +1,59 @@
+{
+  "id": "data-type",
+  "name": "Data type",
+  "version": "1.0.0",
+  "category": "structure",
+  "description": "A value classifier: «dataType» over its attributes.",
+  "defaultSize": {
+    "w": 160,
+    "h": 86
+  },
+  "params": [
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "default": "Money"
+    },
+    {
+      "name": "attributes",
+      "type": "string",
+      "label": "Attributes",
+      "default": "+ amount: Decimal\n+ currency: String",
+      "multiline": true
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "var(--sw-surface)"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

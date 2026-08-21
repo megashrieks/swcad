@@ -277,6 +277,49 @@ Rotation turns about that same point, declared as `pivot: {x: 0, y: 0}` in each 
 port holds still and stays on the grid it was snapped to, and the symbol turns in place rather
 than orbiting the middle of an instance box it does not fill.
 
+## UML library
+
+Thirty-six UML 2.0 parts in `libs/uml`, covering the notation you actually draw: class,
+interface, enumeration, data type, object, component, artifact, deployment node and package for
+structure; actor, use case, action, object node, state, decision, fork, initial/final/flow-final
+node, history, send/receive signal, lifeline, partition, boundary, frame and combined fragment for
+behaviour; and association, directed association, aggregation, composition, generalization,
+realization, dependency and message as connectors. A note rounds it off.
+
+Five shared modules do all the drawing, so the notation is decided once rather than thirty-six
+times:
+
+| Module | What it owns |
+|---|---|
+| `shared/theme.js` | Fonts, padding, leading, text measurement, line and stack layout |
+| `shared/classifier.js` | The compartment box: name over separators over member lists |
+| `shared/container.js` | Package, frame, partition, boundary and note |
+| `shared/shapes.js` | Actor, use case, action, control nodes, signals, lifeline |
+| `shared/relation.js` | One connector chassis: arrowheads, dashes, roles, multiplicities |
+
+**Member lists are one per line.** A class's attributes and operations are plain text
+parameters, edited in a text area in the inspector; blank lines are dropped, and a compartment
+that is empty stays as a thin empty strip because "this class has no attributes" is a statement,
+not an omission. This is what the new `multiline: true` flag on a `ParamDef` is for — the
+inspector renders a growing `<textarea>` instead of a one-line field.
+
+**A classifier box is as big as its instance box or as big as its contents, whichever is
+bigger.** Drag it larger and it stays larger; type past the bottom and it grows. Neither clipping
+the member list nor ignoring the size you dragged to would be defensible.
+
+**Containers draw their border as four separate strokes, not one rectangle, and declare no hit
+area.** A `hit_area` annotation makes the whole node a single solid obstacle, which is right for
+an opaque card and wrong for a package: a connector must be able to run *through* the region it
+is drawn inside. Four thin bars register as four thin obstacles and the interior stays open. The
+four edges all carry a port named `edge`, so they behave as one logical port that a connector
+attaches to on whichever side is nearest.
+
+**Connectors are one component with a different pair of ends.** `relation.render` takes a head
+kind for each end (`none`, `open`, `filled`, `triangle`, `diamond`, `filled-diamond`, `cross`,
+`ball`, `socket`), a dash pattern, an optional stereotype and name, and per-end role names and
+multiplicities. The stroke is trimmed back by the head's depth so a hollow triangle is not drawn
+over its own line.
+
 ## Theming
 
 The chrome is built on a vendored subset of **`@pomavo/ui`** in `src/ui/pomavo/` — shadcn-style

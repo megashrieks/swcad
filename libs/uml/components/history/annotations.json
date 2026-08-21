@@ -1,0 +1,13 @@
+{
+  "body": [
+    {
+      "kind": "hit_area"
+    },
+    {
+      "kind": "port",
+      "name": "edge",
+      "direction": "inout",
+      "surface": "outline"
+    }
+  ]
+}

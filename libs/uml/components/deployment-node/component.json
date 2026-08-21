@@ -1,0 +1,65 @@
+{
+  "id": "deployment-node",
+  "name": "Node",
+  "version": "1.0.0",
+  "category": "structure",
+  "description": "The three-dimensional box of a deployment diagram: a device or an execution environment.",
+  "defaultSize": {
+    "w": 180,
+    "h": 96
+  },
+  "params": [
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "default": "Application server"
+    },
+    {
+      "name": "stereotype",
+      "type": "string",
+      "label": "Stereotype",
+      "default": "device"
+    },
+    {
+      "name": "contents",
+      "type": "string",
+      "label": "Deployed",
+      "default": "",
+      "multiline": true
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "var(--sw-surface)"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

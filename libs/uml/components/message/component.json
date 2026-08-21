@@ -1,0 +1,111 @@
+{
+  "id": "message",
+  "name": "Message",
+  "version": "1.0.0",
+  "category": "relationships",
+  "description": "A message between lifelines. The kind decides the head and the stroke: a filled head for a synchronous call, an open one for asynchronous, dashed for a reply.",
+  "connector": true,
+  "resizable": false,
+  "params": [
+    {
+      "name": "kind",
+      "type": "enum",
+      "label": "Kind",
+      "default": "sync",
+      "options": [
+        "sync",
+        "async",
+        "reply",
+        "create",
+        "destroy"
+      ]
+    },
+    {
+      "name": "style",
+      "type": "enum",
+      "label": "Routing",
+      "default": "straight",
+      "options": [
+        "orthogonal",
+        "straight",
+        "curve"
+      ]
+    },
+    {
+      "name": "label",
+      "type": "string",
+      "label": "Name",
+      "default": "request()"
+    },
+    {
+      "name": "stereotype",
+      "type": "string",
+      "label": "Stereotype",
+      "default": ""
+    },
+    {
+      "name": "labelSize",
+      "type": "number",
+      "label": "Label size",
+      "default": 9,
+      "min": 5,
+      "max": 24,
+      "step": 0.5
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "strokeWidth",
+      "type": "number",
+      "label": "Width",
+      "default": 1.4,
+      "min": 0.5,
+      "max": 8,
+      "step": 0.1
+    },
+    {
+      "name": "radius",
+      "type": "number",
+      "label": "Corner radius",
+      "default": 6,
+      "min": 0,
+      "max": 40
+    },
+    {
+      "name": "avoid",
+      "type": "boolean",
+      "label": "Avoid components",
+      "default": false
+    },
+    {
+      "name": "router",
+      "type": "enum",
+      "label": "Router",
+      "default": "auto",
+      "options": [
+        "auto",
+        "simple"
+      ]
+    },
+    {
+      "name": "stub",
+      "type": "number",
+      "label": "Lead-in",
+      "default": 18,
+      "min": 0,
+      "max": 80
+    },
+    {
+      "name": "clearance",
+      "type": "number",
+      "label": "Clearance",
+      "default": 10,
+      "min": 0,
+      "max": 80
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "id": "partition",
+  "name": "Partition",
+  "version": "1.0.0",
+  "category": "behaviour",
+  "description": "An activity partition - a swimlane - with its name in the header strip.",
+  "defaultSize": {
+    "w": 200,
+    "h": 320
+  },
+  "params": [
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "default": "Customer"
+    },
+    {
+      "name": "orientation",
+      "type": "enum",
+      "label": "Header",
+      "default": "vertical",
+      "options": [
+        "vertical",
+        "horizontal"
+      ]
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "none"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

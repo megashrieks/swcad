@@ -16,7 +16,7 @@ import { PAGE_PRESETS, makePage } from '@core/model/types';
 import type { EditorController } from '../EditorController';
 import { staticMarkup } from '../render';
 import { NumberInput } from '../../ui/NumberInput';
-import { CheckField, ColorField, SelectField, TextField } from '../../ui/Field';
+import { CheckField, ColorField, SelectField, TextAreaField, TextField } from '../../ui/Field';
 import { IconButton } from '../../ui/IconButton';
 import { Button } from '../../ui/pomavo';
 
@@ -752,11 +752,19 @@ export function ParamEditor({
         }
         return (
           <Field key={param.name} label={param.label ?? param.name}>
-            <TextField
-              value={various ? '' : String(value ?? '')}
-              placeholder={various ? 'Mixed' : undefined}
-              onChange={(next) => onChange(param.name, next)}
-            />
+            {param.multiline ? (
+              <TextAreaField
+                value={various ? '' : String(value ?? '')}
+                placeholder={various ? 'Mixed' : undefined}
+                onChange={(next) => onChange(param.name, next)}
+              />
+            ) : (
+              <TextField
+                value={various ? '' : String(value ?? '')}
+                placeholder={various ? 'Mixed' : undefined}
+                onChange={(next) => onChange(param.name, next)}
+              />
+            )}
           </Field>
         );
       })}

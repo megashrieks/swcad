@@ -117,6 +117,13 @@ export interface ParamDef {
   step?: number;
   options?: string[];
   /**
+   * A `string` param whose value is a list rather than a phrase, edited in a box with room
+   * for several lines. A UML class is the case that asked for it: its attributes and its
+   * operations are one parameter each, and a one-line field cannot hold a newline, so
+   * without this the only way to write a member list is a separator character.
+   */
+  multiline?: boolean;
+  /**
    * Kept out of the inspector. For values that are edited on the drawing itself — a
    * markdown text block is typed into the canvas, not into a one-line param field.
    */

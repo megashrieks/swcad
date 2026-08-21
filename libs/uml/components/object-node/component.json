@@ -1,0 +1,58 @@
+{
+  "id": "object-node",
+  "name": "Object node",
+  "version": "1.0.0",
+  "category": "behaviour",
+  "description": "A value passing between actions, with an optional [state] under its name.",
+  "defaultSize": {
+    "w": 120,
+    "h": 46
+  },
+  "params": [
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "default": "Order"
+    },
+    {
+      "name": "state",
+      "type": "string",
+      "label": "State",
+      "default": "validated"
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "var(--sw-surface)"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "id": "lifeline",
+  "name": "Lifeline",
+  "version": "1.0.0",
+  "category": "behaviour",
+  "description": "A sequence diagram participant: the head, the dashed line of time under it, and an optional execution bar. Messages land on the line, at the height you drop them.",
+  "defaultSize": {
+    "w": 120,
+    "h": 260
+  },
+  "params": [
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "default": "user"
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "label": "Type",
+      "default": "User"
+    },
+    {
+      "name": "instance",
+      "type": "boolean",
+      "label": "Instance",
+      "default": true
+    },
+    {
+      "name": "activationFrom",
+      "type": "number",
+      "label": "Bar starts at",
+      "default": 0,
+      "min": 0
+    },
+    {
+      "name": "activationLength",
+      "type": "number",
+      "label": "Bar length",
+      "default": 0,
+      "min": 0
+    },
+    {
+      "name": "activationWidth",
+      "type": "number",
+      "label": "Bar width",
+      "default": 10,
+      "min": 4,
+      "max": 40
+    },
+    {
+      "name": "destroyed",
+      "type": "boolean",
+      "label": "Destroyed",
+      "default": false
+    },
+    {
+      "name": "fill",
+      "type": "color",
+      "label": "Fill",
+      "default": "var(--sw-surface)"
+    },
+    {
+      "name": "stroke",
+      "type": "color",
+      "label": "Stroke",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "ink",
+      "type": "color",
+      "label": "Text",
+      "default": "var(--sw-ink)"
+    },
+    {
+      "name": "fontSize",
+      "type": "number",
+      "label": "Font size",
+      "default": 13,
+      "min": 6
+    },
+    {
+      "name": "lineWidth",
+      "type": "number",
+      "label": "Line width",
+      "default": 1.2,
+      "min": 0.2,
+      "step": 0.1
+    }
+  ]
+}
