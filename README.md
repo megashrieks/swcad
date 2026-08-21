@@ -145,7 +145,11 @@ is then drawn the way that guide is — same dash, same phase, same soft pass un
 one — because a box centred on the gap it is measuring puts the two on top of each other, and a
 solid line there reads as the guide having been swallowed. Anywhere else the bracket is a plain
 line: there is nothing for it to be mistaken for. The caps and the arrow heads stay solid: they
-are the ends of a measurement, not a claim about a coordinate.
+are the ends of a measurement, not a claim about a coordinate. The bracket stands off the
+components at both ends by the same margin the guides keep: the dotted outline is where the eye
+puts the edge of an item, and a dimension line running under it reads as measuring from
+somewhere inside the component. The number is the true edge-to-edge distance either way — that
+is what the gap is, and what the next gap has to match.
 
 Dragging several things at once measures and lines up the **selection**, not whichever member the
 pointer happened to grab: the group's outline is what is being moved and what you can see, so its

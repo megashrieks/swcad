@@ -243,8 +243,14 @@ function layoutMeasure(
 ): MeasureLayout | null {
   const { tx, ty, zoom } = viewport;
   const horizontal = measure.axis === 'x';
-  const a = measure.from * zoom + (horizontal ? tx : ty);
-  const b = measure.to * zoom + (horizontal ? tx : ty);
+  // Stood off the components at both ends. The dotted outline is where the eye puts the
+  // edge of an item, so a bracket that runs under it reads as measuring from somewhere
+  // inside the component — and standing an extension line off the object is how a drawing
+  // is dimensioned anyway. The number stays the true edge-to-edge distance: it is what the
+  // gap is, and what the next gap has to match.
+  const stand = NODE_OUTLINE_PAD * zoom;
+  const a = measure.from * zoom + (horizontal ? tx : ty) + stand;
+  const b = measure.to * zoom + (horizontal ? tx : ty) - stand;
   const cross = measure.at * zoom + (horizontal ? ty : tx);
   const span = b - a;
   if (!(span > MEASURE_MIN_PX)) return null;
