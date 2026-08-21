@@ -102,6 +102,8 @@
   --sw-ruler-bg: var(--sw-paper);
   --sw-ruler-line: color-mix(in srgb, var(--sw-ink) 30%, var(--sw-ruler-bg));
   --sw-ruler-ink: var(--sw-ink-muted);
+  /* The selection band on the gutters — the accent the guides use, not the selection blue. */
+  --sw-ruler-mark: var(--sw-accent);
 
   /* Kept in step with `RULER_SIZE` in `CanvasLayers.tsx`, which sizes the canvases. */
   --ruler-size: 20px;

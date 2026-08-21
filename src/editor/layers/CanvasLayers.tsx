@@ -215,7 +215,7 @@ export function RulerLayer({
   const bg = paletteColor(palette, '--sw-ruler-bg', '#f2f0ed');
   const line = paletteColor(palette, '--sw-ruler-line', '#cfcac3');
   const inkColor = paletteColor(palette, '--sw-ruler-ink', '#6b6660');
-  const markColor = paletteColor(palette, '--sw-selection', '#3b82f6');
+  const markColor = paletteColor(palette, '--sw-ruler-mark', '#d99a2b');
 
   useEffect(() => {
     const top = topRef.current;
@@ -257,7 +257,7 @@ export function RulerLayer({
         const a = from * zoom + pan;
         const b = a + span * zoom;
         ctx.save();
-        ctx.globalAlpha = 0.18;
+        ctx.globalAlpha = 0.22;
         ctx.fillStyle = markColor;
         ctx.fillRect(...rect(a, 0, Math.max(b - a, 1), RULER_SIZE));
         ctx.restore();

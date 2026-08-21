@@ -67,6 +67,7 @@ export const CHROME_TOKENS: readonly string[] = Object.freeze([
   '--sw-ruler-bg',
   '--sw-ruler-line',
   '--sw-ruler-ink',
+  '--sw-ruler-mark',
 ]);
 
 /** Every custom property `readCanvasPalette` should resolve. */
