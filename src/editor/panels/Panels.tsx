@@ -9,12 +9,12 @@ import {
   PinTopIcon,
   TrashIcon,
 } from '@radix-ui/react-icons';
-import type { ComponentEntry } from '@core/library/registry';
+import type { ComponentEntry, LibraryRegistry } from '@core/library/registry';
 import { polylineLength } from '@core/geometry/index';
 import type { Node, ParamDef } from '@core/model/types';
 import { PAGE_PRESETS, makePage } from '@core/model/types';
 import type { EditorController } from '../EditorController';
-import { staticMarkup } from '../render';
+import { previewMarkup } from '../render';
 import { NumberInput } from '../../ui/NumberInput';
 import { CheckField, ColorField, SelectField, TextAreaField, TextField } from '../../ui/Field';
 import { IconButton } from '../../ui/IconButton';
@@ -42,24 +42,32 @@ export function Field({ label, children }: { label: string; children: React.Reac
 }
 
 /** A component drawn at rest, with its default parameters — the picture in every palette. */
-export function ComponentPreview({ entry }: { entry: ComponentEntry }): JSX.Element {
-  const { markup, size } = useMemo(
-    () => staticMarkup(entry.def, { params: defaultParams(entry.def.params), meta: {} }),
-    [entry.def],
+export function ComponentPreview({
+  entry,
+  registry,
+}: {
+  entry: ComponentEntry;
+  registry?: LibraryRegistry | null;
+}): JSX.Element {
+  const revision = registry?.revision ?? 0;
+  const { markup, box } = useMemo(
+    // A component the editor has just saved is a new definition under the same ref, and
+    // the registry counts that as a revision — so the tile is redrawn.
+    () => previewMarkup(entry, registry ?? null),
+    [entry, registry, revision],
   );
-  const w = Math.max(size.w, 1);
-  const h = Math.max(size.h, 1);
+  const w = Math.max(box.w, 1);
+  const h = Math.max(box.h, 1);
+  const pad = Math.max(w, h) * 0.06;
   return (
-    <svg className="preview" viewBox={`-6 -6 ${w + 12} ${h + 12}`} preserveAspectRatio="xMidYMid meet">
+    <svg
+      className="preview"
+      viewBox={`${box.x - pad} ${box.y - pad} ${w + pad * 2} ${h + pad * 2}`}
+      preserveAspectRatio="xMidYMid meet"
+    >
       <g dangerouslySetInnerHTML={{ __html: markup }} />
     </svg>
   );
-}
-
-function defaultParams(params: ParamDef[] = []): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const p of params) out[p.name] = p.default;
-  return out;
 }
 
 /** Which library groups the user has folded away, remembered across reloads. */
@@ -230,7 +238,7 @@ export function LibraryPanel({
                           : undefined
                       }
                     >
-                      <ComponentPreview entry={entry} />
+                      <ComponentPreview entry={entry} registry={controller.registry} />
                       <span>{entry.def.name}</span>
                     </button>
                     {editable || deletable ? (

@@ -167,7 +167,7 @@ export function ComponentPicker({
                             disabled={busy}
                             onClick={() => void run(() => onOpen(entry))}
                           >
-                            <ComponentPreview entry={entry} />
+                            <ComponentPreview entry={entry} registry={registry} />
                             <span>{entry.def.name}</span>
                           </button>
                           {readOnly ? null : (

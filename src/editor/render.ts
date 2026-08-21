@@ -1,4 +1,7 @@
 import type { ResolvedConnectionInfo, ResolvedNodeInfo } from '@core/model/graph';
+import type { Rect } from '@core/geometry/index';
+import type { ComponentEntry, LibraryRegistry } from '@core/library/registry';
+import { previewRender } from '@core/library/preview';
 import { defAnnotations, resolveAnnotations } from '@core/model/annotations';
 import { resolveBinding } from '@core/model/bind';
 import type { ComponentDef } from '@core/model/types';
@@ -95,6 +98,26 @@ export function staticMarkup(
 ): { markup: string; size: { w: number; h: number } } {
   if (!def) return { markup: '', size: { w: 0, h: 0 } };
   const tree = sanitize(parseSvg(def.geometry?.source ?? ''));
+  const box = treeBounds(tree);
+  return {
+    markup: dressed(def, tree, scope, styles),
+    size: def.defaultSize ?? { w: box.w, h: box.h },
+  };
+}
+
+/**
+ * Apply a definition's label and style annotations to a tree and serialize it.
+ *
+ * The tree may be the component's own drawing or the output of its script; both are
+ * dressed the same way, which is what makes a scripted component's palette tile and its
+ * appearance on a sheet the same picture.
+ */
+function dressed(
+  def: ComponentDef,
+  tree: VNode[],
+  scope: Record<string, unknown>,
+  styles: Record<string, Record<string, string>>,
+): string {
   const params = (scope.params ?? {}) as Record<string, unknown>;
   const labels: Record<string, string> = {};
   const rich: Record<string, VNode[]> = {};
@@ -118,11 +141,47 @@ export function staticMarkup(
     }
   }
   for (const [elId, attrs] of Object.entries(styles)) overrides.set(elId, { ...overrides.get(elId), ...attrs });
-  const box = treeBounds(tree);
-  return {
-    markup: serialize(cloneWith(tree, overrides, labels, new Set(), rich)),
-    size: def.defaultSize ?? { w: box.w, h: box.h },
-  };
+  return serialize(cloneWith(tree, overrides, labels, new Set(), rich));
+}
+
+/**
+ * The picture in a palette tile: the component's script output if it has a script, its
+ * own drawing if it has not.
+ *
+ * The box comes back measured rather than declared. A scripted component is not obliged
+ * to fill its instance box or even to start at the origin — the software symbols hang
+ * from the port ring, so half of one sits at negative coordinates — and a tile framed on
+ * `defaultSize` would crop them.
+ *
+ * Results are held against the entry object, which the registry replaces whenever a
+ * library is loaded or a component saved. Some of these scripts are generative and cost
+ * real milliseconds; without this, folding a palette group away and back would redraw a
+ * maze from scratch.
+ */
+const previewCache = new WeakMap<ComponentEntry, { markup: string; box: Rect }>();
+
+export function previewMarkup(
+  entry: ComponentEntry,
+  registry: LibraryRegistry | null,
+): { markup: string; box: Rect } {
+  const cached = previewCache.get(entry);
+  if (cached) return cached;
+  const def = entry.def;
+  const params = defaultParams(def.params);
+  const size = def.defaultSize ?? { w: 120, h: 80 };
+  const scripted = registry ? previewRender(registry, entry, params, size) : null;
+  const tree = scripted?.vnodes ?? sanitize(parseSvg(def.geometry?.source ?? ''));
+  const measured = treeBounds(tree);
+  const box = measured.w > 0 && measured.h > 0 ? measured : { x: 0, y: 0, w: size.w, h: size.h };
+  const value = { markup: dressed(def, tree, { params, meta: {} }, scripted?.styles ?? {}), box };
+  previewCache.set(entry, value);
+  return value;
+}
+
+function defaultParams(params: ComponentDef['params'] = []): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const p of params ?? []) out[p.name] = p.default;
+  return out;
 }
 
 /**

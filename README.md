@@ -382,6 +382,20 @@ Script reads are recorded as dependency keys (`node:<id>`, `conn:<id>`, `ports:<
 `bucket:<x>,<y>`, `clock:minute`), so a graph-aware component is only recomputed when something
 actually changes inside the region it inspected — not on every frame.
 
+### Palette tiles
+
+A tile runs the component's own `render` hook (`src/core/library/preview.ts`) rather than showing
+its authored `shape.svg`, because a scripted component ships no geometry and used to come out
+blank. The context it is given is deliberately barren — one node at the origin with its default
+parameters, an empty graph, a stopped clock — so a component that colours itself by how many of
+its ports are connected draws its unconnected self instead of failing. A connector is handed one
+straight run left to right, which is the pose that shows an arrowhead and a dash pattern most
+plainly.
+
+The tile is framed on the drawing's *measured* bounds, not on `defaultSize`: a script is not
+obliged to fill its instance box or even to start at the origin. Results are cached against the
+entry object, which the registry replaces whenever a library loads or a component is saved.
+
 ## Connector routing
 
 A connector is drawn by one of three routers, picked from the toolbar's **Routing** group or
