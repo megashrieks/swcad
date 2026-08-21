@@ -208,6 +208,7 @@ export function resolvePackage(files, fallbackId = 'component') {
     annotations,
     defaultSize: manifest.defaultSize || shape.size || undefined,
     resizable: manifest.resizable,
+    pivot: manifest.pivot,
     marker: manifest.marker,
   };
   if (scriptFile) def.script = scriptFile;
@@ -241,6 +242,7 @@ export function packageFromDefinition(def, script) {
   };
   if (def.connector) manifest.connector = true;
   if (def.resizable !== undefined) manifest.resizable = def.resizable;
+  if (def.pivot) manifest.pivot = def.pivot;
   const source = String(def.geometry?.source ?? '').replace(/^\s*<g\s*>([\s\S]*)<\/g>\s*$/, '$1');
   if (def.defaultSize && !source.trim()) manifest.defaultSize = def.defaultSize;
   manifest.params = def.params ?? [];

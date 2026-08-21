@@ -5,6 +5,10 @@
   "category": "data",
   "description": "In-memory cache or key-value store.",
   "resizable": false,
+  "pivot": {
+    "x": 0,
+    "y": 0
+  },
   "defaultSize": {
     "w": 130,
     "h": 130

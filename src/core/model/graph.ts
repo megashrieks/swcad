@@ -665,21 +665,25 @@ export class GraphEngine {
     const effective = new Map<string, Transform>();
     const resolving = new Set<string>();
     // Rotation turns about the middle of the instance box, not its top-left corner,
-    // so a rotated shape stays where it was drawn instead of swinging away.
+    // so a rotated shape stays where it was drawn instead of swinging away. That is the
+    // middle of the *drawing* only for a component that fills its box; one that hangs its
+    // artwork elsewhere says where to turn instead, with `pivot`.
     //
     // A drawing with no thickness on an axis turns about the drawing itself instead.
     // `base/line` draws along the top edge of a nominally 1-unit-tall box, so the box
     // centre sits half a unit below the line; a quarter turn would carry that half unit
     // onto the other axis and leave the line off the grid for good. Pivoting on the line
     // keeps it on the lattice at every right angle.
-    const withPivot = (t: Transform, node: Node, bounds: Rect): Transform =>
+    const withPivot = (t: Transform, node: Node, bounds: Rect, def: ComponentDef | null): Transform =>
       t.rot
         ? {
             ...t,
-            pivot: {
-              x: bounds.w > 0 ? node.size.w / 2 : bounds.x,
-              y: bounds.h > 0 ? node.size.h / 2 : bounds.y,
-            },
+            pivot: def?.pivot
+              ? { x: def.pivot.x, y: def.pivot.y }
+              : {
+                  x: bounds.w > 0 ? node.size.w / 2 : bounds.x,
+                  y: bounds.h > 0 ? node.size.h / 2 : bounds.y,
+                },
           }
         : t;
     const effectiveOf = (id: string): Transform => {
@@ -689,13 +693,13 @@ export class GraphEngine {
       if (!info) return { x: 0, y: 0, rot: 0, scale: 1 };
       const attachment = info.node.attachment;
       if (!attachment || resolving.has(id)) {
-        const own = withPivot(info.node.transform, info.node, info.localBounds);
+        const own = withPivot(info.node.transform, info.node, info.localBounds, info.entry?.def ?? null);
         effective.set(id, own);
         return own;
       }
       resolving.add(id);
       const parent = base.get(attachment.parentId);
-      let result = withPivot(info.node.transform, info.node, info.localBounds);
+      let result = withPivot(info.node.transform, info.node, info.localBounds, info.entry?.def ?? null);
       if (parent) {
         const parentT = effectiveOf(attachment.parentId);
         const anchorLocal = localAnchorPoint(parent.entry?.def ?? null, parent.vnodes, attachment.anchorId);

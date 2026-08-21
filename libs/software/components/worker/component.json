@@ -5,6 +5,10 @@
   "category": "compute",
   "description": "Background job or scheduled task runner.",
   "resizable": false,
+  "pivot": {
+    "x": 0,
+    "y": 0
+  },
   "defaultSize": {
     "w": 130,
     "h": 130

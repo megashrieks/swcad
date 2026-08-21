@@ -139,6 +139,18 @@ export interface ComponentDef {
   defaultSize?: { w: number; h: number };
   resizable?: boolean;
   /**
+   * Local point a rotation turns about. Rotation otherwise turns about the middle of the
+   * instance box, which is the middle of the drawing only for a component that fills that
+   * box — a script that hugs its content, or one that hangs its artwork off the node's
+   * origin, is instead carried around a point outside itself, and a quarter turn reads as
+   * an orbit rather than a turn.
+   *
+   * Naming the point is left to the author because only the author knows which part should
+   * hold still: for a symbol whose port is the thing being aimed at, that is the port, and
+   * keeping it fixed also keeps it on the grid it was snapped to.
+   */
+  pivot?: { x: number; y: number };
+  /**
    * Contributes a point rather than a picture: a port, an anchor, a resize grip. Drawn in
    * full while you are placing it, but when the component it was drawn into is compiled it
    * keeps only what it annotates, and it never counts towards that component's extent.

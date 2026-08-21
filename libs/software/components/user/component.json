@@ -5,6 +5,10 @@
   "category": "actors",
   "description": "A person or actor using the system.",
   "resizable": false,
+  "pivot": {
+    "x": 0,
+    "y": 0
+  },
   "defaultSize": {
     "w": 130,
     "h": 130

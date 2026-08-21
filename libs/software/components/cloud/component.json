@@ -5,6 +5,10 @@
   "category": "platform",
   "description": "A managed or off-premises platform.",
   "resizable": false,
+  "pivot": {
+    "x": 0,
+    "y": 0
+  },
   "defaultSize": {
     "w": 130,
     "h": 130

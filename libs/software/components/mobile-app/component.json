@@ -5,6 +5,10 @@
   "category": "clients",
   "description": "Native or hybrid mobile client.",
   "resizable": false,
+  "pivot": {
+    "x": 0,
+    "y": 0
+  },
   "defaultSize": {
     "w": 130,
     "h": 130

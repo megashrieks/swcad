@@ -5,6 +5,10 @@
   "category": "edge",
   "description": "Spreads traffic across a pool of instances.",
   "resizable": false,
+  "pivot": {
+    "x": 0,
+    "y": 0
+  },
   "defaultSize": {
     "w": 130,
     "h": 130

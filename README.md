@@ -210,6 +210,12 @@ default size) and `annotations.json` (element id -> port / label / handle / slot
 area / style). That is the primitive form; `libs/meta` is written that way, and so is anything
 whose art comes out of a drawing program.
 
+Beside `params`, a manifest may set `resizable: false` (no Width/Height in the inspector) and
+`pivot: {x, y}` — the local point a rotation turns about. Rotation otherwise turns about the
+middle of the instance box, which is the middle of the *drawing* only for a component that
+fills that box; a script that hugs its content or hangs its artwork off the node's origin is
+otherwise carried around a point outside itself, and a quarter turn reads as an orbit.
+
 Every one of these files gets a tab in the component editor, `document.json` included — asking
 where a component keeps its geometry and finding no answer in the file list is worse than a tab
 you cannot type into. That one is **read-only** and always live: it shows the drawing as the
@@ -266,6 +272,10 @@ lattice is only symmetric about a line that lies on it: two symbols placed as mi
 to visibly different lengths, their ports sitting at the *same* offset from a grid line instead of
 opposite ones. Hanging from the ring makes the port inherit the node's own snap, and makes equally
 spaced symbols have equally spaced ports whatever their captions say.
+
+Rotation turns about that same point, declared as `pivot: {x: 0, y: 0}` in each manifest: the
+port holds still and stays on the grid it was snapped to, and the symbol turns in place rather
+than orbiting the middle of an instance box it does not fill.
 
 ## Theming
 
