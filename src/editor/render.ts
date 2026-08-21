@@ -5,7 +5,7 @@ import { previewRender } from '@core/library/preview';
 import { defAnnotations, resolveAnnotations } from '@core/model/annotations';
 import { resolveBinding } from '@core/model/bind';
 import type { ComponentDef } from '@core/model/types';
-import { parseSvg, sanitize, serialize, treeBounds, elementPoint, findById, type VNode } from '@core/script/svg';
+import { parseSvg, sanitize, serialize, treeBounds, elementBounds, elementPoint, findById, walk, type VNode } from '@core/script/svg';
 import { layoutMarkdown, markdownChildren, type TextStyle } from '@core/text/markdown';
 
 /** Map fill-slot names to the element ids they control. */
@@ -53,6 +53,66 @@ function cloneWith(
  * component — the alignment guides, most of all — clears this rather than the bare bounds.
  */
 export const NODE_OUTLINE_PAD = 2;
+
+/**
+ * A run of connector ink, in world coordinates, for something that has to keep off it.
+ *
+ * A connector's bounding box is mostly empty — an orthogonal route around an obstacle
+ * claims the whole detour — so the shape itself is what gets described, as the SVG path
+ * data it is drawn from.
+ */
+export interface InkStroke {
+  d: string;
+  /** Stroke width in world units, `0` for a shape that is only filled. */
+  width: number;
+  filled: boolean;
+}
+
+function pointsPath(points: string | undefined, close: boolean): string | null {
+  const nums = (points ?? '').trim().split(/[\s,]+/).map(Number);
+  if (nums.length < 4 || nums.some((n) => !Number.isFinite(n))) return null;
+  const parts: string[] = [];
+  for (let i = 0; i + 1 < nums.length; i += 2) parts.push(`${i === 0 ? 'M' : 'L'}${nums[i]} ${nums[i + 1]}`);
+  return close ? `${parts.join('')}Z` : parts.join('');
+}
+
+/**
+ * What a connector actually draws: its route as path data, and boxes for its captions and
+ * for anything a script drew that is not a path.
+ *
+ * Text is left to `labelBoxes`, which measured it while the graph resolved — the drawn
+ * `<text>` node carries an anchor point, not an extent.
+ */
+export function connectorInk(info: ResolvedConnectionInfo): { strokes: InkStroke[]; boxes: Rect[] } {
+  const strokes: InkStroke[] = [];
+  const boxes: Rect[] = [...info.labelBoxes];
+  walk(info.vnodes, (node) => {
+    const fill = node.attrs.fill;
+    const filled = fill !== undefined && fill !== 'none' && fill !== 'transparent';
+    const width = Number(node.attrs['stroke-width'] ?? 1);
+    const stroke = node.attrs.stroke === 'none' ? 0 : Number.isFinite(width) ? width : 1;
+    if (node.tag === 'path' && node.attrs.d) {
+      strokes.push({ d: node.attrs.d, width: stroke, filled });
+      return;
+    }
+    if (node.tag === 'polygon' || node.tag === 'polyline') {
+      const d = pointsPath(node.attrs.points, node.tag === 'polygon');
+      if (d) strokes.push({ d, width: stroke, filled: filled || node.tag === 'polygon' });
+      return;
+    }
+    if (node.tag === 'line') {
+      const { x1, y1, x2, y2 } = node.attrs;
+      if (x1 !== undefined && y1 !== undefined && x2 !== undefined && y2 !== undefined) {
+        strokes.push({ d: `M${x1} ${y1}L${x2} ${y2}`, width: stroke || 1, filled: false });
+      }
+      return;
+    }
+    if (node.tag === 'text' || node.tag === 'g' || node.tag === 'svg') return;
+    const box = elementBounds(node);
+    if (box.w > 0 || box.h > 0) boxes.push(box);
+  });
+  return { strokes, boxes };
+}
 
 /**
  * Serialize a resolved node, applying script styles, label bindings and hit areas.

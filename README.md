@@ -164,8 +164,10 @@ A component can overrule the rule with an [`align` annotation](docs/authoring-co
 A guide runs the full height of the sheet because it is a claim about a coordinate, not about a
 stretch of empty space — but it has nothing to say where something is already drawn. So the
 components are punched out of it, outline and all, and each guide reads as the run of clear space
-between the things it lines up. The component being placed is punched out too: its ghost is as
-much a drawing as the rest.
+between the things it lines up. Connectors are punched out along the line they draw rather than by
+their box — an orthogonal route claims the whole detour it makes, most of which is empty sheet —
+together with their captions, which a line through the middle of spoils worst. The component being
+placed is punched out too: its ghost is as much a drawing as the rest.
 
 ## Selecting
 

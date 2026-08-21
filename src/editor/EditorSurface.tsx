@@ -22,7 +22,15 @@ import type { Node } from '@core/model/types';
 import type { ComponentEntry } from '@core/library/registry';
 import type { EditorController, DragState, SnapResult, ToolId } from './EditorController';
 import { GridLayer, HighlightLayer } from './layers/CanvasLayers';
-import { connectionMarkup, nodeMarkup, nodeTransform, previewMarkup, NODE_OUTLINE_PAD } from './render';
+import {
+  connectionMarkup,
+  connectorInk,
+  nodeMarkup,
+  nodeTransform,
+  previewMarkup,
+  NODE_OUTLINE_PAD,
+  type InkStroke,
+} from './render';
 
 export interface EditorSurfaceProps {
   controller: EditorController;
@@ -770,17 +778,27 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
     [page],
   );
 
-  // What the guides have to stay out of. Connections are left out: a route is mostly empty
-  // space, and punching its bounding box out would cut a hole the size of the whole detour.
+  // What the guides have to stay out of. A connection is described by the line it draws
+  // rather than by its box: an orthogonal route claims the whole detour it makes, and
+  // punching that out would cut a hole the size of the bend. Its captions are boxes, and
+  // they are the part a guide most obviously spoils.
   // The placement ghost counts as drawn — a guide crossing it would read as a line through
   // the component about to be dropped.
   const placement = drag ? null : ghostPlacement(controller, controller.cursorWorld);
   const ghostBox = placement?.box ?? null;
   const ghostKey = ghostBox ? `${ghostBox.x} ${ghostBox.y} ${ghostBox.w} ${ghostBox.h}` : '';
-  const obstacles = useMemo(() => {
+  const { obstacles, ink } = useMemo(() => {
     const boxes = graph.order.map((id) => graph.nodes.get(id)?.bounds).filter((b): b is Rect => b !== undefined);
+    const strokes: InkStroke[] = [];
+    for (const id of graph.connectionOrder) {
+      const info = graph.connections.get(id);
+      if (!info) continue;
+      const drawn = connectorInk(info);
+      strokes.push(...drawn.strokes);
+      boxes.push(...drawn.boxes);
+    }
     if (ghostBox) boxes.push(ghostBox);
-    return boxes;
+    return { obstacles: boxes, ink: strokes };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ghostKey stands in for ghostBox
   }, [graph, ghostKey]);
 
@@ -803,6 +821,7 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
         guides={controller.guides}
         measures={controller.measures}
         obstacles={obstacles}
+        ink={ink}
         active={highlightActive}
       />
 

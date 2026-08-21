@@ -3,7 +3,7 @@ import type { GridConfig } from '@core/model/types';
 import type { Rect } from '@core/geometry/index';
 import { paletteColor, useCanvasPalette } from '../../ui/canvasPalette';
 import type { Guide, Measure, Viewport } from '../EditorController';
-import { NODE_OUTLINE_PAD } from '../render';
+import { NODE_OUTLINE_PAD, type InkStroke } from '../render';
 
 interface Size {
   w: number;
@@ -355,6 +355,7 @@ export function HighlightLayer({
   guides,
   measures,
   obstacles,
+  ink,
   active,
 }: {
   viewport: Viewport;
@@ -363,6 +364,8 @@ export function HighlightLayer({
   measures: Measure[];
   /** World boxes of what is already drawn, which the guides are kept out of. */
   obstacles: Rect[];
+  /** Connector routes, kept as paths because their boxes are mostly empty space. */
+  ink: InkStroke[];
   active: boolean;
 }): JSX.Element {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -433,6 +436,19 @@ export function HighlightLayer({
       if (x0 > w || y0 > h || x1 < 0 || y1 < 0) continue;
       ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
     }
+    // A connector is punched out along the line it draws rather than by its box: an
+    // orthogonal route around an obstacle claims the whole detour, and clearing that
+    // would take the guide out over a stretch of empty sheet.
+    ctx.translate(tx, ty);
+    ctx.scale(zoom, zoom);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const stroke of ink) {
+      const path = new Path2D(stroke.d);
+      if (stroke.filled) ctx.fill(path);
+      ctx.lineWidth = stroke.width + NODE_OUTLINE_PAD * 2;
+      ctx.stroke(path);
+    }
     ctx.restore();
 
     // Brackets take the space they need out of the guides before drawing into it: a guide
@@ -448,7 +464,7 @@ export function HighlightLayer({
       ctx.restore();
     }
     for (const bracket of brackets) drawMeasure(ctx, bracket, guideColor);
-  }, [tx, ty, zoom, w, h, guides, measures, obstacles, active, guideColor, guideWeakColor]);
+  }, [tx, ty, zoom, w, h, guides, measures, obstacles, ink, active, guideColor, guideWeakColor]);
 
   return <canvas ref={ref} className="layer" style={{ width: w, height: h }} />;
 }
