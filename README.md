@@ -119,6 +119,30 @@ made by dragging between ports, not by a click, so there is no landing position 
 
 `Escape` puts the tool away; holding `Shift` while dropping keeps it armed for the next one.
 
+### Equal gaps
+
+Alignment guides answer "is this edge level with that one". They say nothing about *rhythm*,
+which is what actually makes a row look deliberate: the gaps between things being the same
+number. So while a node is being placed or dragged, the editor also looks at the gap it is about
+to make with its nearest neighbour, and if that gap matches one already on the sheet it pulls the
+node onto it and draws both gaps as CAD-style **dimension brackets** — `|<--- 97 --->|` for the
+gap being made, and the same bracket, half as bright, over the gap it is copying. Landing exactly
+halfway between two neighbours is the same rule with no third component involved: both gaps are
+the node's own, so both are drawn at full strength.
+
+A gap is only compared against things sharing a band with it — a horizontal gap needs the two
+items to overlap vertically — so a bracket always belongs to a row or a column instead of
+measuring across the whole sheet. At most one pair is drawn per axis; the point is to show a
+match, not to dimension the drawing.
+
+Against the other snaps, an equal gap beats the grid but loses to alignment: being level with
+something is a stronger statement than being evenly spaced from it, and if both are available at
+the same distance the guide wins. With snap-to-grid on the pulled position must itself land on
+the lattice, the same rule alignment obeys, so the grid is never quietly broken — on a
+grid-snapped sheet the gaps are multiples of the grid anyway, so matches are still reachable.
+Brackets are computed from the position the node has actually landed on rather than from the
+cursor, so a bracket is a statement of fact, not a suggestion.
+
 ## Selecting
 
 Selection follows the drawing, never the box around it.

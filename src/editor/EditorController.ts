@@ -8,6 +8,9 @@ import type { DocumentStore } from '@core/model/store';
 import { uid } from '@core/model/store';
 import type { LibraryRegistry } from '@core/library/registry';
 import type { Connection, Endpoint, Node, ParamDef } from '@core/model/types';
+import { spacingMeasures, spacingShift, type Measure } from './spacing';
+
+export type { Measure } from './spacing';
 
 export interface Viewport {
   tx: number;
@@ -49,12 +52,19 @@ export interface DragState {
 export interface SnapResult {
   pos: Vec;
   guides: Guide[];
+  /** Equal-gap brackets for the snapped position; empty unless `snap` was given a box. */
+  measures: Measure[];
 }
 
 const SNAP_TOLERANCE_PX = 7;
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 8;
 const GUIDE_CAP_PER_AXIS = 64;
+/** How far around the moving box to look for a rhythm to copy, in screen pixels. */
+const SPACING_REACH_PX = 900;
+const SPACING_PEER_CAP = 96;
+/** Anything thinner is two components touching rather than a gap. */
+const SPACING_MIN_GAP = 1;
 /** Coordinates are indexed to a thousandth of a unit; anything closer than this is "on the line". */
 const ALIGN_EPSILON = 1e-2;
 const CLIPBOARD_KIND = 'swcad/clipboard';
@@ -179,6 +189,8 @@ export class EditorController {
   onPlace: ((world: Vec, repeat: boolean) => void) | null = null;
   drag: DragState | null = null;
   guides: Guide[] = [];
+  /** Equal-gap brackets for whatever is being placed or moved. */
+  measures: Measure[] = [];
   snapEnabled = true;
   showPorts = true;
   /**
@@ -474,8 +486,18 @@ export class EditorController {
    * closer to the raw value wins the actual placement; alignment keeps a small
    * bias so it wins ties, since it reflects deliberate component layout rather
    * than an arbitrary lattice.
+   *
+   * Pass `box` — the moving geometry's bounds at the raw position — to get equal-gap
+   * handling too: the position is pulled onto a gap that repeats one already on the sheet,
+   * and `measures` comes back with the brackets to draw. It is separate from the probes
+   * because spacing is about the whole rect, not about individual coordinates.
    */
-  snap(world: Vec, movingIds: string[] = [], extraProbes: { xs: number[]; ys: number[] } = { xs: [], ys: [] }): SnapResult {
+  snap(
+    world: Vec,
+    movingIds: string[] = [],
+    extraProbes: { xs: number[]; ys: number[] } = { xs: [], ys: [] },
+    box?: Rect,
+  ): SnapResult {
     const doc = this.store.getDocument();
     const tolerance = SNAP_TOLERANCE_PX / this.viewport.zoom;
     const exclude = new Set(movingIds);
@@ -486,6 +508,9 @@ export class EditorController {
     let x = world.x;
     let y = world.y;
     const guides: Guide[] = [];
+    /** Whether an alignment guide, rather than the lattice, claimed the axis. */
+    let alignedX = false;
+    let alignedY = false;
 
     if (this.snapEnabled) {
       const probesX = [world.x, ...extraProbes.xs];
@@ -505,6 +530,8 @@ export class EditorController {
       const choiceY = chooseAxisSnap(world.y, bestY, gridActive, step, doc.grid.origin.y, epsilon);
       x = choiceX.value;
       y = choiceY.value;
+      alignedX = choiceX.primaryCoord !== null;
+      alignedY = choiceY.primaryCoord !== null;
 
       // A guide is "hit" when the geometry actually lands on it, not merely when it won the
       // snap: one shift can satisfy several coordinates at once (equal-width neighbours line
@@ -523,10 +550,74 @@ export class EditorController {
       y = snapTo(world.y, step, doc.grid.origin.y);
     }
 
+    let measures: Measure[] = [];
+    if (box) {
+      const peers = this.spacingPeers(box, exclude);
+      if (peers.length > 0) {
+        if (this.snapEnabled) {
+          /**
+           * Where spacing sits in the pecking order. An edge lining up is the stronger
+           * statement, so alignment is only overruled by a strictly closer gap; the
+           * lattice is an arbitrary rule rather than a fact about the drawing, so a gap
+           * that repeats beats it on the same small bias alignment gets; and when nothing
+           * claimed the axis at all, any gap within reach is an improvement on nothing.
+           */
+          const opt = { tolerance, epsilon, minGap: SPACING_MIN_GAP };
+          const beats = (shift: number, taken: number, aligned: boolean): boolean => {
+            if (aligned) return Math.abs(shift) < Math.abs(taken) - epsilon;
+            if (gridActive) return Math.abs(shift) <= Math.abs(taken) + epsilon;
+            return true;
+          };
+          const shiftX = spacingShift(box, peers, 'x', opt);
+          if (
+            shiftX !== null &&
+            beats(shiftX, x - world.x, alignedX) &&
+            (!gridActive || onLattice(world.x + shiftX, step, doc.grid.origin.x))
+          ) {
+            x = world.x + shiftX;
+          }
+          const shiftY = spacingShift(box, peers, 'y', opt);
+          if (
+            shiftY !== null &&
+            beats(shiftY, y - world.y, alignedY) &&
+            (!gridActive || onLattice(world.y + shiftY, step, doc.grid.origin.y))
+          ) {
+            y = world.y + shiftY;
+          }
+        }
+        // Measured where the box actually lands, so a bracket is a statement of fact
+        // rather than of intent: half a screen pixel out and it does not appear.
+        const landed = { ...box, x: box.x + (x - world.x), y: box.y + (y - world.y) };
+        measures = spacingMeasures(landed, peers, {
+          tolerance,
+          epsilon: Math.max(ALIGN_EPSILON, 0.5 / this.viewport.zoom),
+          minGap: SPACING_MIN_GAP,
+        });
+      }
+    }
+
     return {
       pos: { x, y },
       guides,
+      measures,
     };
+  }
+
+  /** Node bounds near the moving box, as candidates for a gap worth repeating. */
+  private spacingPeers(box: Rect, exclude: ReadonlySet<string>): Rect[] {
+    const graph = this.getGraph();
+    const reach = SPACING_REACH_PX / this.viewport.zoom;
+    const area = { x: box.x - reach, y: box.y - reach, w: box.w + reach * 2, h: box.h + reach * 2 };
+    const out: Rect[] = [];
+    for (const id of this.engine.spatial.query(area)) {
+      if (exclude.has(id)) continue;
+      // Connections are not in `nodes`, and a route has no gap worth measuring.
+      const info = graph.nodes.get(id);
+      if (!info || info.node.hidden) continue;
+      out.push(info.bounds);
+      if (out.length >= SPACING_PEER_CAP) break;
+    }
+    return out;
   }
 
   // ------------------------------------------------------------ operations

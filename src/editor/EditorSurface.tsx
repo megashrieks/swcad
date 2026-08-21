@@ -19,7 +19,8 @@ import { measureVertical, measureWidth } from '@core/text/measure';
 import type { ResolvedNodeInfo } from '@core/model/graph';
 import { pickGroupMember, portGroupIds } from '@core/model/graph';
 import type { Node } from '@core/model/types';
-import type { EditorController, DragState, ToolId } from './EditorController';
+import type { ComponentEntry } from '@core/library/registry';
+import type { EditorController, DragState, SnapResult, ToolId } from './EditorController';
 import { GridLayer, HighlightLayer } from './layers/CanvasLayers';
 import { connectionMarkup, nodeMarkup, nodeTransform, previewMarkup } from './render';
 
@@ -103,6 +104,28 @@ const HIT_RING: readonly (readonly [number, number])[] = [
 
 const zoomFactor = (dy: number, perPixel: number): number =>
   Math.min(2, Math.max(0.5, Math.exp(-dy * perPixel)));
+
+/**
+ * Where the armed component would land, and the hints that go with it.
+ *
+ * The ghost, the guides and the click that drops the node all have to agree about the
+ * position, and they run at different moments, so all three ask this rather than each
+ * snapping for themselves. The box handed to `snap` is the component's own measured
+ * drawing, not its instance box: a symbol may hang off its origin, and the gap the user
+ * is judging is the one they can see.
+ */
+function ghostPlacement(
+  controller: EditorController,
+  world: Vec | null,
+): { entry: ComponentEntry; markup: string; pos: Vec; snapped: SnapResult } | null {
+  if (controller.tool !== 'place' || !controller.placeRef || !world) return null;
+  const entry = controller.registry.get(controller.placeRef);
+  if (!entry || entry.def.connector) return null;
+  const { markup, box } = previewMarkup(entry, controller.registry);
+  const at = { x: world.x + box.x, y: world.y + box.y, w: box.w, h: box.h };
+  const snapped = controller.snap(world, [], { xs: [], ys: [] }, at);
+  return { entry, markup, pos: snapped.pos, snapped };
+}
 
 /**
  * Both ends of the rubber-band line while connecting. Surface ports have no
@@ -270,7 +293,8 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
     if (event.button !== 0) return;
 
     if (controller.tool === 'place' && (controller.placeRef || controller.onPlace)) {
-      const snapped = controller.snap(world);
+      const placement = ghostPlacement(controller, world);
+      const snapped = placement?.snapped ?? controller.snap(world);
       if (controller.placeRef) {
         const node = controller.createNode(controller.placeRef, snapped.pos);
         if (node) controller.select([node.id]);
@@ -283,6 +307,7 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
         controller.onPlace = null;
       }
       controller.guides = [];
+      controller.measures = [];
       controller.notify();
       return;
     }
@@ -375,12 +400,16 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
       controller.hoverId = nextHover;
       controller.hoverPort = port;
 
-      const ghost =
-        controller.tool === 'place' && controller.placeRef ? controller.snap(world).pos : null;
+      // The ghost carries the same hints a move drag gets: what it lines up with, and
+      // which of its gaps repeat one already on the sheet.
+      const placement = ghostPlacement(controller, world);
+      const ghost = placement?.pos ?? null;
       if (ghost?.x !== ghostRef.current?.x || ghost?.y !== ghostRef.current?.y) {
         ghostRef.current = ghost;
         changed = true;
       }
+      controller.guides = placement?.snapped.guides ?? [];
+      controller.measures = placement?.snapped.measures ?? [];
 
       if (changed) controller.notify();
       return;
@@ -412,10 +441,16 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
           ys: [b.y + dy, b.y + b.h / 2 + dy, b.y + b.h + dy, ...leadInfo.ports.map((p) => p.pos.y + dy)],
         };
         const target = { x: leadOrigin.transform.x + dx, y: leadOrigin.transform.y + dy };
-        const snapped = controller.snap(target, drag.nodeIds, probes);
+        const snapped = controller.snap(target, drag.nodeIds, probes, {
+          x: b.x + dx,
+          y: b.y + dy,
+          w: b.w,
+          h: b.h,
+        });
         adjustX = dx + (snapped.pos.x - target.x);
         adjustY = dy + (snapped.pos.y - target.y);
         controller.guides = snapped.guides;
+        controller.measures = snapped.measures;
       }
 
       controller.store.silent(() => {
@@ -441,6 +476,7 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
         const w = Math.max(20, snapped.pos.x - info.effective.x + offset.x);
         const h = Math.max(20, snapped.pos.y - info.effective.y + offset.y);
         controller.guides = snapped.guides;
+        controller.measures = snapped.measures;
         controller.store.silent(() => {
           controller.store.updateNode(id, { size: { w, h } });
         });
@@ -454,6 +490,7 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
       drag.hoverPort = port;
       const snapped = controller.snap(world);
       controller.guides = snapped.guides;
+      controller.measures = snapped.measures;
       controller.notify();
       return;
     }
@@ -466,6 +503,8 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
     // keeps port markers and the placement ghost alive.
     if (controller.drag) return;
     ghostRef.current = null;
+    controller.guides = [];
+    controller.measures = [];
     if (controller.cursorWorld === null && controller.hoverPort === null && controller.hoverId === null) return;
     controller.cursorWorld = null;
     controller.hoverPort = null;
@@ -477,6 +516,7 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
     const drag = controller.drag;
     controller.drag = null;
     controller.guides = [];
+    controller.measures = [];
     if (!drag) {
       controller.notify();
       return;
@@ -738,6 +778,7 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
         viewport={viewport}
         size={size}
         guides={controller.guides}
+        measures={controller.measures}
         active={highlightActive}
       />
 
@@ -916,15 +957,13 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
           */}
           {!drag && controller.tool === 'place' && controller.placeRef
             ? (() => {
-                const entry = controller.registry.get(controller.placeRef);
-                const at = controller.cursorWorld;
-                if (!entry || !at || entry.def.connector) return null;
-                const pos = controller.snap(at).pos;
+                const placement = ghostPlacement(controller, controller.cursorWorld);
+                if (!placement) return null;
                 return (
                   <RawGroup
                     className="place-ghost"
-                    transform={`translate(${pos.x} ${pos.y})`}
-                    markup={previewMarkup(entry, controller.registry).markup}
+                    transform={`translate(${placement.pos.x} ${placement.pos.y})`}
+                    markup={placement.markup}
                   />
                 );
               })()

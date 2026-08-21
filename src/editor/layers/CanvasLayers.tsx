@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { GridConfig } from '@core/model/types';
 import { paletteColor, useCanvasPalette } from '../../ui/canvasPalette';
-import type { Guide, Viewport } from '../EditorController';
+import type { Guide, Measure, Viewport } from '../EditorController';
 
 interface Size {
   w: number;
@@ -182,15 +182,125 @@ function selectGuides(guides: Guide[], zoom: number, tx: number, ty: number, w: 
   return [...pick('x', w / 2), ...pick('y', h / 2)];
 }
 
+/** Half-length of the bar that closes each end of a dimension bracket. */
+const MEASURE_CAP = 5;
+const MEASURE_ARROW = 6;
+const MEASURE_FONT = '10px Inter, "Segoe UI", sans-serif';
+/** Clear space either side of the label, where the dimension line breaks for it. */
+const MEASURE_TEXT_PAD = 5;
+/** Below this the bracket is more clutter than measurement. */
+const MEASURE_MIN_PX = 14;
+const MEASURE_MARGIN = 24;
+
+/** `57`, or `57.5` — a distance in world units, at the precision a sheet is drawn to. */
+function measureLabel(distance: number): string {
+  const rounded = Math.round(distance * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+/**
+ * One dimension bracket: `|<--- 57 --->|`, the same drawing turned on its side for a
+ * vertical gap.
+ *
+ * Drawn in screen space so the caps, heads and label keep their size at any zoom — the
+ * number is the thing being read, and a bracket that scaled with the drawing would be
+ * unreadable at the zoom levels where spacing actually matters. All of it is laid out in
+ * `(along, across)` and mapped at the end, so the vertical case is the same code.
+ */
+function drawMeasure(
+  ctx: CanvasRenderingContext2D,
+  measure: Measure,
+  viewport: Viewport,
+  size: Size,
+  color: string,
+): void {
+  const { tx, ty, zoom } = viewport;
+  const horizontal = measure.axis === 'x';
+  const a = measure.from * zoom + (horizontal ? tx : ty);
+  const b = measure.to * zoom + (horizontal ? tx : ty);
+  const cross = measure.at * zoom + (horizontal ? ty : tx);
+  const span = b - a;
+  if (!(span > MEASURE_MIN_PX)) return;
+
+  const alongLimit = horizontal ? size.w : size.h;
+  const crossLimit = horizontal ? size.h : size.w;
+  if (b < -MEASURE_MARGIN || a > alongLimit + MEASURE_MARGIN) return;
+  if (cross < -MEASURE_MARGIN || cross > crossLimit + MEASURE_MARGIN) return;
+
+  const at = (along: number, across: number): [number, number] =>
+    horizontal ? [along, cross + across] : [cross + across, along];
+
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  // The gap being copied is context, not the answer, so it reads as an echo of the one
+  // the pointer is making.
+  ctx.globalAlpha = measure.role === 'reference' ? 0.5 : 1;
+
+  const segment = (u1: number, v1: number, u2: number, v2: number): void => {
+    const [x1, y1] = at(u1, v1);
+    const [x2, y2] = at(u2, v2);
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+  };
+
+  ctx.font = MEASURE_FONT;
+  const label = measureLabel(measure.distance);
+  const textW = ctx.measureText(label).width;
+  const mid = (a + b) / 2;
+  const inline = span >= textW + 2 * (MEASURE_TEXT_PAD + MEASURE_ARROW + 2);
+
+  ctx.beginPath();
+  segment(a, -MEASURE_CAP, a, MEASURE_CAP);
+  segment(b, -MEASURE_CAP, b, MEASURE_CAP);
+  if (inline) {
+    segment(a, 0, mid - textW / 2 - MEASURE_TEXT_PAD, 0);
+    segment(mid + textW / 2 + MEASURE_TEXT_PAD, 0, b, 0);
+  } else {
+    segment(a, 0, b, 0);
+  }
+  ctx.stroke();
+
+  if (span > MEASURE_ARROW * 2 + 4) {
+    for (const [tip, dir] of [
+      [a, 1],
+      [b, -1],
+    ] as const) {
+      const [x0, y0] = at(tip, 0);
+      const [x1, y1] = at(tip + dir * MEASURE_ARROW, -3);
+      const [x2, y2] = at(tip + dir * MEASURE_ARROW, 3);
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  const [lx, ly] = at(mid, inline ? 0 : -7);
+  ctx.translate(lx, ly);
+  // A vertical dimension reads bottom-up, the way the connector captions do.
+  if (!horizontal) ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, 0, 0);
+  ctx.restore();
+}
+
 export function HighlightLayer({
   viewport,
   size,
   guides,
+  measures,
   active,
 }: {
   viewport: Viewport;
   size: Size;
   guides: Guide[];
+  measures: Measure[];
   active: boolean;
 }): JSX.Element {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -240,7 +350,9 @@ export function HighlightLayer({
     strokeLines(hits, guideWeakColor, 3, false);
     strokeLines(hits, guideColor, 1.5, true);
     ctx.setLineDash([]);
-  }, [tx, ty, zoom, w, h, guides, active, guideColor, guideWeakColor]);
+
+    for (const measure of measures) drawMeasure(ctx, measure, { tx, ty, zoom }, { w, h }, guideColor);
+  }, [tx, ty, zoom, w, h, guides, measures, active, guideColor, guideWeakColor]);
 
   return <canvas ref={ref} className="layer" style={{ width: w, height: h }} />;
 }
