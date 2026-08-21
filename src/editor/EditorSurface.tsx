@@ -446,9 +446,13 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
         const box = { x: target.x + offset.x, y: target.y + offset.y, w: b.w, h: b.h };
         const shiftX = target.x - leadInfo.node.transform.x;
         const shiftY = target.y - leadInfo.node.transform.y;
+        // Edges and centre come from the painted box, which is what the rest of the sheet
+        // publishes to line up with — probing with the bounds instead would offer a caption's
+        // edge to a drawing that never advertises one.
+        const a = leadInfo.alignBox;
         const probes = {
-          xs: [box.x, box.x + b.w / 2, box.x + b.w, ...leadInfo.ports.map((p) => p.pos.x + shiftX)],
-          ys: [box.y, box.y + b.h / 2, box.y + b.h, ...leadInfo.ports.map((p) => p.pos.y + shiftY)],
+          xs: [a.x + shiftX, a.x + a.w / 2 + shiftX, a.x + a.w + shiftX, ...leadInfo.ports.map((p) => p.pos.x + shiftX)],
+          ys: [a.y + shiftY, a.y + a.h / 2 + shiftY, a.y + a.h + shiftY, ...leadInfo.ports.map((p) => p.pos.y + shiftY)],
         };
         const snapped = controller.snap(target, drag.nodeIds, probes, box);
         adjustX = dx + (snapped.pos.x - target.x);

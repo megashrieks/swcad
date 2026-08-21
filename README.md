@@ -41,12 +41,12 @@ ref or a file the package does not have are rewritten to what is actually on scr
 | Feature | Notes |
 |---|---|
 | Custom grid | Cell size, subdivisions, origin, units, visibility, snap toggle; drawn on a canvas layer with level-of-detail so it stays cheap at any zoom |
-| Alignment highlighting | Every node contributes its bbox edges, centre and port coordinates to a global `AlignmentIndex`; while placing, dragging or connecting, matching rows/columns light up and snap. Nearby lines stay faint; every line the moving geometry actually lands on — edge to edge, centre to centre, port to port, several at once — is drawn bright. With **Snap to grid** on, a guide can only win if the resulting position is still on the grid lattice, so alignment can never drag a node off-grid |
+| Alignment highlighting | Every node contributes the edges and centre of its **painted** geometry, plus its port coordinates, to a global `AlignmentIndex`; while placing, dragging or connecting, matching rows/columns light up and snap. Nearby lines stay faint; every line the moving geometry actually lands on — edge to edge, centre to centre, port to port, several at once — is drawn bright. With **Snap to grid** on, a guide can only win if the resulting position is still on the grid lattice, so alignment can never drag a node off-grid |
 | Optional page | ISO A0–A5, ANSI A–E, Letter, Tabloid or custom; orientation, margins, units-per-mm, blueprint frame with zone ticks and labels. Off by default (infinite canvas) |
 | Legend / title block | A normal library component pinned bottom-right of the page, bound to document fields. Only available when a page is selected. The same component can also be dropped on the sheet, where each copy carries its own title/author/date/rev/size/sheet and falls back to the document metadata while a field is left blank |
 | Component libraries | A library is a folder with `library.json` plus one folder per component (`components/<id>/`); it can export any number of components. A library marked `editorOnly` is offered in the component editor and not on sheets |
 | Components are documents | A component's drawing is a `document.json` — byte-for-byte the format a sheet uses. It is drawn on the same canvas with the same tools, and compiled into flat annotated SVG when the library loads. A component may also be written directly as `shape.svg` + `annotations.json`; that is the primitive form `libs/meta` is made of |
-| Annotated SVG components | Elements are tagged as `port`, `label`, `handle`, `fill_slot`, `anchor`, `hit_area` or `style`. The annotation is a property of the shape: a circle annotated as a port is connectable anywhere on its circumference. Fields may be written `{{params.x}}`, so one drawing means whatever the instance that placed it says |
+| Annotated SVG components | Elements are tagged as `port`, `label`, `handle`, `fill_slot`, `anchor`, `hit_area`, `align` or `style`. The annotation is a property of the shape: a circle annotated as a port is connectable anywhere on its circumference. Fields may be written `{{params.x}}`, so one drawing means whatever the instance that placed it says |
 | Component scripting | Sandboxed JS with `render`, `style` and `ports` hooks; scripts can read the whole graph and return SVG |
 | Markdown text | The `meta/text` part is a block of Markdown — headings, bullets, ordered items, quotes, fences and inline `**bold**` / `*italic*` / `` `code` `` / `~~strike~~`. Double-click to edit the source in place. It has no parameters: its box is measured from the rendered text, so what you select is what you see |
 | Connectors | Port-to-port with live preview, waypoints, straight/orthogonal/curve routers. The orthogonal router is an A* search that runs along the document's grid lines where it can (and an obstacle-derived lattice where it can't), so connectors staircase around obstacles instead of cutting through them. Endpoints follow the nodes they are attached to |
@@ -144,6 +144,22 @@ the lattice, the same rule alignment obeys, so the grid is never quietly broken 
 grid-snapped sheet the gaps are multiples of the grid anyway, so matches are still reachable.
 Brackets are computed from the position the node has actually landed on rather than from the
 cursor, so a bracket is a statement of fact, not a suggestion.
+
+### What lines up
+
+Guides come from the **ink**, not from the bounding box: a component publishes the extent of the
+geometry it actually paints, plus its port positions. Text, transparent hit areas and hidden
+elements are left out, because you line a drawing up by what you can see.
+
+The difference shows on a captioned icon. Its box runs from the top of the icon to the bottom of
+the subtitle, so the box centre sits somewhere in the caption — a coordinate that is halfway down
+nothing, offered alongside the icon's own middle. Ink-based guides give the three lines you would
+draw by hand: the top, the middle and the bottom of the icon, with the caption along for the ride.
+The dragged node probes with the same box it publishes, so what lights up is symmetric.
+
+A component can overrule the rule with an [`align` annotation](docs/authoring-components.md):
+`{ "kind": "align", "snap": false }` on a painted decoration keeps it out of the guides, and
+`"snap": true` on invisible geometry puts it in.
 
 ## Selecting
 

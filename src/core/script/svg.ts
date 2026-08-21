@@ -999,6 +999,12 @@ export interface ElementPart {
   /** The element's `id`, or an empty string when it has none. */
   id: string;
   bounds: Rect;
+  /**
+   * Whether the element puts any ink on the sheet. Invisible geometry is still an
+   * obstacle — a transparent hit rectangle is there precisely so the whole component
+   * behaves as one — but it is not something the eye can line anything up with.
+   */
+  painted: boolean;
 }
 
 /**
@@ -1031,10 +1037,28 @@ export function elementParts(nodes: VNode[]): ElementPart[] {
     out.push({
       id: node.attrs.id ?? '',
       bounds: halo > 0 ? rect(box.x - halo, box.y - halo, box.w + halo * 2, box.h + halo * 2) : box,
+      painted: isPainted(node),
     });
   };
   for (const node of nodes) visit(node);
   return out;
+}
+
+/** Whether a paint attribute puts anything on the sheet. An absent one is SVG's black fill. */
+function paints(value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined) return fallback;
+  return value !== 'none' && value !== 'transparent';
+}
+
+/**
+ * Whether the element is visible at all. A group is taken as visible: it paints through
+ * its children, which carry their own attributes.
+ */
+function isPainted(node: VNode): boolean {
+  if (node.tag === 'g' || node.tag === 'svg') return true;
+  if (node.attrs.visibility === 'hidden' || node.attrs.display === 'none') return false;
+  if (node.attrs.opacity !== undefined && num(node.attrs.opacity, 1) <= 0) return false;
+  return paints(node.attrs.fill, true) || paints(node.attrs.stroke, false);
 }
 
 /** How far the ink reaches past the geometry: half the stroke, or nothing if unstroked. */

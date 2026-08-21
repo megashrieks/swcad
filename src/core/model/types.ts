@@ -1,6 +1,6 @@
 import type { Rect, Transform, Vec } from '../geometry/index';
 
-export type AnnotationKind = 'port' | 'label' | 'handle' | 'fill_slot' | 'anchor' | 'hit_area' | 'style';
+export type AnnotationKind = 'port' | 'label' | 'handle' | 'fill_slot' | 'anchor' | 'hit_area' | 'align' | 'style';
 
 export type PortDirection = 'in' | 'out' | 'inout' | 'none';
 
@@ -73,6 +73,20 @@ export interface AnchorAnnotation extends AnnotationBase {
 
 export interface HitAreaAnnotation extends AnnotationBase {
   kind: 'hit_area';
+}
+
+/**
+ * Whether the element helps decide what lines up with what.
+ *
+ * The editor's guides are drawn from what is on the sheet, and by default that means what
+ * can actually be seen: invisible geometry (a transparent hit rectangle, a spacer) is left
+ * out, and so is text, which is measured but never counted as a shape. This annotation is
+ * the manual override — `false` keeps a visible element out of the alignment coordinates,
+ * `true` puts an invisible one back in.
+ */
+export interface AlignAnnotation extends AnnotationBase {
+  kind: 'align';
+  snap: boolean;
   name?: string;
 }
 
@@ -96,6 +110,7 @@ export type Annotation =
   | FillSlotAnnotation
   | AnchorAnnotation
   | HitAreaAnnotation
+  | AlignAnnotation
   | StyleAnnotation;
 
 /**

@@ -519,6 +519,31 @@ happily thread a connector between the strokes of a component that is mostly emp
 Declare a hit area when the inside of your component should read as filled even though it is
 drawn hollow.
 
+### `align`
+
+Overrides whether an element offers its edges and centre as **alignment guides** — the lines that
+light up while a node is dragged past its neighbours.
+
+```json
+{ "kind": "align", "snap": false }
+```
+
+By default the guides come from the component's *painted* geometry: anything with a fill or a
+stroke, ignoring text, transparent hit areas and hidden elements. That is usually what you want,
+because you line a drawing up by its ink. A captioned icon therefore offers the icon's top, middle
+and bottom rather than a middle that sits halfway down the caption.
+
+Use the annotation for the two cases the rule gets wrong:
+
+| | |
+|---|---|
+| `"snap": false` | Painted, but not something to line up with — a drop shadow, a decorative flourish, a background wash |
+| `"snap": true` | Invisible, but worth lining up with — an unpainted rect marking the footprint a row of components should share |
+
+If every painted part is annotated out, the component falls back to its full bounds. The
+annotation only affects alignment: routing obstacles, hit-testing and the selection outline are
+unchanged.
+
 ## Worked example
 
 `libs/base/components/box/` in full:

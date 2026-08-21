@@ -202,6 +202,12 @@ export interface ResolvedNodeInfo {
    * node-wide box cannot express.
    */
   parts: ElementPart[];
+  /**
+   * The box other components line up against: the painted geometry only, so a caption or
+   * an invisible hit rectangle does not move the edges and the centre line the guides are
+   * drawn from. Falls back to `bounds` for a component that paints nothing.
+   */
+  alignBox: Rect;
   ports: ResolvedPortInfo[];
   anchors: ResolvedAnchorInfo[];
   handles: ResolvedHandleInfo[];
@@ -443,8 +449,28 @@ const LABEL_GUARD = 3;
  */
 function worldParts(vnodes: VNode[], t: Transform, bounds: Rect): ElementPart[] {
   const parts = elementParts(vnodes);
-  if (parts.length === 0) return [{ id: '', bounds }];
-  return parts.map((p) => ({ id: p.id, bounds: transformedBounds(t, p.bounds) }));
+  if (parts.length === 0) return [{ id: '', bounds, painted: true }];
+  return parts.map((p) => ({ id: p.id, bounds: transformedBounds(t, p.bounds), painted: p.painted }));
+}
+
+/**
+ * The box a component offers the rest of the sheet to line up with.
+ *
+ * Not the same thing as its bounds. A caption hangs below the drawing and a hit rectangle
+ * is stretched around the lot, and neither is something the eye reads as an edge — but
+ * both move the bounding box, and with it the centre line, so an icon with a subtitle
+ * stopped offering its own middle and started offering a coordinate that is halfway down
+ * nothing. What is left is the ink: the parts that are actually painted, minus anything
+ * annotated out, plus anything invisible annotated back in.
+ */
+function alignmentBox(parts: ElementPart[], out: ReadonlySet<string>, back: ReadonlySet<string>, bounds: Rect): Rect {
+  let box: Rect | null = null;
+  for (const part of parts) {
+    if (part.id && out.has(part.id)) continue;
+    if (!part.painted && !(part.id && back.has(part.id))) continue;
+    box = box ? rectUnion(box, part.bounds) : part.bounds;
+  }
+  return box ?? bounds;
 }
 
 export interface GraphEngineOptions {
@@ -747,6 +773,7 @@ export class GraphEngine {
         localBounds: info.localBounds,
         bounds: rect(),
         parts: [],
+        alignBox: rect(),
         ports: [],
         anchors: [],
         handles: [],
@@ -772,6 +799,8 @@ export class GraphEngine {
 
       // ports / anchors / handles from static annotations
       const labelLocal = new Map<string, Rect>();
+      const alignOptIn = new Set<string>();
+      const alignOptOut = new Set<string>();
       const collect = (): void => {
         resolved.ports = [];
         resolved.anchors = [];
@@ -780,6 +809,8 @@ export class GraphEngine {
         resolved.styles = {};
         resolved.labelNodes = {};
         labelLocal.clear();
+        alignOptIn.clear();
+        alignOptOut.clear();
         for (const [elId, ann] of resolveAnnotations(def, info.node.params)) {
           const element = findById(resolved.vnodes, elId);
           const point = element ? elementPoint(element) : { x: 0, y: 0 };
@@ -817,6 +848,8 @@ export class GraphEngine {
             });
           } else if (ann.kind === 'hit_area') {
             resolved.hitAreas.push(elId);
+          } else if (ann.kind === 'align') {
+            (ann.snap ? alignOptIn : alignOptOut).add(elId);
           } else if (ann.kind === 'style') {
             // Attributes the instance decides: the same thing a `style()` hook returns,
             // declared instead of coded. Element ids double as slot names in `render.ts`.
@@ -922,6 +955,7 @@ export class GraphEngine {
       resolved.localBounds = localBox;
       resolved.bounds = transformedBounds(resolved.effective, localBox);
       resolved.parts = worldParts(resolved.vnodes, resolved.effective, resolved.bounds);
+      resolved.alignBox = alignmentBox(resolved.parts, alignOptOut, alignOptIn, resolved.bounds);
       if (resolved.error) errors.push({ id, message: resolved.error });
     }
 
@@ -970,7 +1004,7 @@ export class GraphEngine {
     let bounds: Rect | null = null;
     for (const [id, resolved] of nodes) {
       seen.add(id);
-      this.alignment.updateRect(id, resolved.bounds, {
+      this.alignment.updateRect(id, resolved.alignBox, {
         xs: resolved.ports.map((p) => p.pos.x),
         ys: resolved.ports.map((p) => p.pos.y),
       });
