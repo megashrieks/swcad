@@ -261,8 +261,9 @@ These are the one shipped family that is **not resizable**. The drawing hugs its
 instance box was never its size — dragging it only fed the icon size, and fed it badly: the glyph
 got whatever room the caption left, so two boxes dragged to the same size came out with different
 icons whenever their labels were different lengths. `Icon size` says the number instead, and the
-box follows it. `0` means "take it from the instance box", which is how sheets drawn before the
-parameter existed are still measured.
+box follows it. The instance box is not consulted at all; a value below 8, or none, is read as
+unset and comes out at the default 40, so sheets drawn before the parameter existed still look
+like the palette.
 
 The symbol also hangs from its **port ring**, not from a corner: the node's origin is the centre
 of the circle a connector lands on. A corner origin put the port at `origin + boxW / 2`, and half

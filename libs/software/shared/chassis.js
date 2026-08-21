@@ -12,13 +12,13 @@
  *
  * Because the drawing hugs its content, the instance box is not a size and these
  * components are not resizable: `iconSize` says how big the symbol is, and the
- * caption follows from `fontSize`.
+ * caption follows from `fontSize`. The instance box is not consulted at all.
  *
  * It is drawn from a script rather than from a static `shape.svg` for one reason:
  * static geometry is stretched by the engine on resize, with the x and y scales
  * applied separately. That is right for a plain box and wrong for a pictogram -
- * a wide node would smear the icon sideways. Drawing to `ctx.size` instead lets
- * the glyph keep its 1:1 aspect at any box size.
+ * a wide node would smear the icon sideways. Drawing to a stated size instead
+ * lets the glyph keep its 1:1 aspect however the node is placed.
  *
  * Element ids match `annotations.json`, which is how the port, the hit area and
  * the editable title are attached to scripted output.
@@ -27,6 +27,11 @@
 var icons = require('lib:icons');
 
 var FONT = 'Inter, Segoe UI, sans-serif';
+
+/** How big a symbol is when nothing says otherwise. */
+var DEFAULT_ICON = 40;
+/** Below this a pictogram is a smudge, so a smaller number is read as unset. */
+var MIN_ICON = 8;
 
 function pick(value, fallback) {
   return value === undefined || value === null || value === '' ? fallback : value;
@@ -43,8 +48,6 @@ function r2(v) {
 
 defineComponent({
   render: function (ctx, iconName) {
-    var w = Math.max(1, ctx.size.w);
-    var h = Math.max(1, ctx.size.h);
     var p = ctx.params;
 
     var accent = pick(p.accent, 'var(--sw-accent)');
@@ -53,7 +56,23 @@ defineComponent({
     var subtitle = String(pick(p.subtitle, ''));
     var showIcon = p.showIcon === undefined ? true : Boolean(p.showIcon);
     var iconStroke = Math.max(0.2, numOr(p.iconStroke, 1.8));
-    var iconSize = Math.max(0, numOr(p.iconSize, 0));
+
+    // `iconSize` is how big the symbol is, full stop. These components are not
+    // resizable, because the instance box was never the size of anything: the
+    // drawn box hugs its content, so dragging it only fed this one number, and
+    // it fed it badly - the room left for the glyph is what the caption did not
+    // take, so two boxes dragged to the same size came out with different icons
+    // whenever their labels were different lengths. Saying the number outright
+    // is the whole point; it is not capped by the box, and it is not capped at
+    // the authored size either, since these are vector outlines that cost
+    // nothing to scale up.
+    //
+    // Anything unset, blank or too small to read is the default rather than a
+    // second meaning for the parameter: a sheet drawn before `iconSize` existed
+    // stored no value, and one drawn while it still meant "measure the box"
+    // stored 0, and both should now come out the size the palette shows.
+    var iconSize = numOr(p.iconSize, 0);
+    if (!(iconSize >= MIN_ICON)) iconSize = DEFAULT_ICON;
 
     var subSize = Math.max(7, titleSize - 3);
     var pad = 6;
@@ -62,21 +81,7 @@ defineComponent({
     var subH = subtitle ? subSize * 1.3 : 0;
     var textH = titleH + subH;
 
-    // `iconSize` is how big the symbol is. These components are not resizable,
-    // because the instance box was never the size of anything: the drawn box
-    // hugs its content, so dragging it only fed this one number, and it fed it
-    // badly - the room left for the glyph is what the caption did not take, so
-    // two boxes dragged to the same size came out with different icons whenever
-    // their labels were different lengths. Saying the number outright is the
-    // whole point; it is not capped by the box, and it is not capped at the
-    // authored size either, since these are vector outlines that cost nothing
-    // to scale up.
-    //
-    // 0 means "take it from the instance box", which is how every sheet drawn
-    // before the parameter existed is still measured.
-    var room = Math.min(w - pad * 2, h - pad * 2 - textH - (textH > 0 ? gap : 0));
-    var glyph = showIcon ? (iconSize > 0 ? iconSize : Math.max(0, room)) : 0;
-    if (!(glyph >= 12)) glyph = 0;
+    var glyph = showIcon ? iconSize : 0;
 
     var contentH = glyph + (glyph > 0 && textH > 0 ? gap : 0) + textH;
 
@@ -90,14 +95,8 @@ defineComponent({
 
     // The hit box hugs the drawn content rather than the whole instance box, so
     // selecting, grabbing and routing all treat the symbol as the size it looks.
-    //
-    // A glyph sized by hand is not clipped back to the instance box - the number
-    // is the promise, and honouring it only sometimes would put two symbols set
-    // to the same size back to different sizes.
-    var naturalW = contentW + pad * 2;
-    var naturalH = contentH + pad * 2;
-    var boxW = iconSize > 0 ? naturalW : Math.min(w, naturalW);
-    var boxH = iconSize > 0 ? naturalH : Math.min(h, naturalH);
+    var boxW = contentW + pad * 2;
+    var boxH = contentH + pad * 2;
 
     // The symbol hangs from its port ring, not from a corner: the node's origin
     // is the centre of the ring, so everything else is placed around it.

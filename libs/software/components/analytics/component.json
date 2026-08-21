@@ -49,8 +49,8 @@
       "name": "iconSize",
       "type": "number",
       "label": "Icon size",
-      "default": 0,
-      "min": 0,
+      "default": 40,
+      "min": 8,
       "step": 1
     },
     {
