@@ -140,11 +140,12 @@ rhythm worth copying is two rows up. Dropping the last tile of a grid therefore 
 whole grid, which is the point — the reassurance is *they are all the same*, and one lonely
 bracket cannot say that. Alignment guides are full-height lines and would otherwise
 run along a dimension line or strike through its number, so they give way: the guides are cut
-back around each bracket, leaving it in clear space. The dimension line is then drawn the way a
-guide is — same dash, same phase, same soft pass under a bright one — because a box centred on
-the gap it is measuring puts the two on top of each other, and a solid line there reads as the
-guide having been swallowed. The caps and the arrow heads stay solid: they are the ends of a
-measurement, not a claim about a coordinate.
+back around each bracket, leaving it in clear space. A dimension line lying along a live guide
+is then drawn the way that guide is — same dash, same phase, same soft pass under a bright
+one — because a box centred on the gap it is measuring puts the two on top of each other, and a
+solid line there reads as the guide having been swallowed. Anywhere else the bracket is a plain
+line: there is nothing for it to be mistaken for. The caps and the arrow heads stay solid: they
+are the ends of a measurement, not a claim about a coordinate.
 
 Dragging several things at once measures and lines up the **selection**, not whichever member the
 pointer happened to grab: the group's outline is what is being moved and what you can see, so its

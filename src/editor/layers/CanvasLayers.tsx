@@ -224,6 +224,8 @@ interface MeasureLayout {
   a: number;
   b: number;
   mid: number;
+  /** Screen coordinate of the line the bracket is drawn on, across the gap it measures. */
+  cross: number;
   label: string;
   textW: number;
   /** Whether the number sits in a break in the line, or above a line too short to break. */
@@ -269,6 +271,7 @@ function layoutMeasure(
     a,
     b,
     mid: (a + b) / 2,
+    cross,
     label,
     textW,
     inline: span >= textW + 2 * (MEASURE_TEXT_PAD + MEASURE_ARROW + 2),
@@ -300,7 +303,13 @@ function carveMeasure(ctx: CanvasRenderingContext2D, m: MeasureLayout): void {
  * number is the thing being read, and a bracket that scaled with the drawing would be
  * unreadable at the zoom levels where spacing actually matters.
  */
-function drawMeasure(ctx: CanvasRenderingContext2D, m: MeasureLayout, color: string, weak: string): void {
+function drawMeasure(
+  ctx: CanvasRenderingContext2D,
+  m: MeasureLayout,
+  color: string,
+  weak: string,
+  onGuide: boolean,
+): void {
   ctx.save();
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
@@ -326,20 +335,25 @@ function drawMeasure(ctx: CanvasRenderingContext2D, m: MeasureLayout, color: str
   segment(b, -MEASURE_CAP, b, MEASURE_CAP);
   ctx.stroke();
 
-  // The dimension line is drawn as a guide is — same dash, same phase, same soft pass
-  // under a bright one — because half the time it is lying on one. A solid line there
-  // reads as the guide having been swallowed by the bracket.
+  // A dimension line lying along a live guide — a box centred on the gap it is measuring
+  // puts the two on top of each other — is drawn the way that guide is: same dash, same
+  // phase, same soft pass under a bright one, so the run carries on across the bracket
+  // instead of the guide reading as swallowed. Anywhere else it is a plain line, because
+  // there is nothing for it to be mistaken for.
   const runs: [number, number][] = m.inline
     ? [
         [a, mid - textW / 2 - MEASURE_TEXT_PAD],
         [mid + textW / 2 + MEASURE_TEXT_PAD, b],
       ]
     : [[a, b]];
-  ctx.setLineDash(HINT_DASH);
-  for (const [pass, width] of [
-    [weak, 2.5],
-    [color, 1],
-  ] as const) {
+  if (onGuide) ctx.setLineDash(HINT_DASH);
+  const passes: [string, number][] = onGuide
+    ? [
+        [weak, 2.5],
+        [color, 1],
+      ]
+    : [[color, 1]];
+  for (const [pass, width] of passes) {
     ctx.strokeStyle = pass;
     ctx.lineWidth = width;
     for (const [u1, u2] of runs) {
@@ -496,7 +510,18 @@ export function HighlightLayer({
       for (const bracket of brackets) carveMeasure(ctx, bracket);
       ctx.restore();
     }
-    for (const bracket of brackets) drawMeasure(ctx, bracket, guideColor, guideWeakColor);
+    for (const bracket of brackets) {
+      // Dashed only where it is lying along a guide that is itself dashed — that is the
+      // line it could be mistaken for. A guide the geometry merely came close to is drawn
+      // solid, and so is clear sheet.
+      const onGuide = lines.some(
+        (l) =>
+          l.primary &&
+          l.axis === (bracket.horizontal ? 'y' : 'x') &&
+          Math.abs(l.screen - bracket.cross) <= 1,
+      );
+      drawMeasure(ctx, bracket, guideColor, guideWeakColor, onGuide);
+    }
   }, [tx, ty, zoom, w, h, guides, measures, obstacles, ink, active, guideColor, guideWeakColor]);
 
   return <canvas ref={ref} className="layer" style={{ width: w, height: h }} />;
