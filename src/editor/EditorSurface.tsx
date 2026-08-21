@@ -765,6 +765,13 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
     [page],
   );
 
+  // What the guides have to stay out of. Connections are left out: a route is mostly empty
+  // space, and punching its bounding box out would cut a hole the size of the whole detour.
+  const obstacles = useMemo(
+    () => graph.order.map((id) => graph.nodes.get(id)?.bounds).filter((b): b is Rect => b !== undefined),
+    [graph],
+  );
+
   return (
     <div
       ref={hostRef}
@@ -783,6 +790,7 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
         size={size}
         guides={controller.guides}
         measures={controller.measures}
+        obstacles={obstacles}
         active={highlightActive}
       />
 

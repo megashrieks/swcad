@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { GridConfig } from '@core/model/types';
+import type { Rect } from '@core/geometry/index';
 import { paletteColor, useCanvasPalette } from '../../ui/canvasPalette';
 import type { Guide, Measure, Viewport } from '../EditorController';
 
@@ -352,12 +353,15 @@ export function HighlightLayer({
   size,
   guides,
   measures,
+  obstacles,
   active,
 }: {
   viewport: Viewport;
   size: Size;
   guides: Guide[];
   measures: Measure[];
+  /** World boxes of what is already drawn, which the guides are kept out of. */
+  obstacles: Rect[];
   active: boolean;
 }): JSX.Element {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -365,8 +369,8 @@ export function HighlightLayer({
   const { w, h } = size;
 
   const palette = useCanvasPalette();
-  const guideColor = paletteColor(palette, '--sw-guide', '#c07d16');
-  const guideWeakColor = paletteColor(palette, '--sw-guide-weak', 'rgba(192, 125, 22, 0.35)');
+  const guideColor = paletteColor(palette, '--sw-guide', '#d8a860');
+  const guideWeakColor = paletteColor(palette, '--sw-guide-weak', 'rgba(216, 168, 96, 0.34)');
 
   useEffect(() => {
     const canvas = ref.current;
@@ -406,9 +410,26 @@ export function HighlightLayer({
       1,
       false,
     );
-    strokeLines(hits, guideWeakColor, 3.5, true);
-    strokeLines(hits, guideColor, 1.5, true);
+    strokeLines(hits, guideWeakColor, 2.5, true);
+    strokeLines(hits, guideColor, 1, true);
     ctx.setLineDash([]);
+
+    // A guide runs the full height of the sheet because it is a claim about a coordinate,
+    // not about a stretch of empty space — but it has nothing to say where a component is
+    // already drawn, and passing behind one only shows through anything unfilled. So the
+    // components are punched out of it, and each guide reads as the run of clear space
+    // between the things it lines up.
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    for (const box of obstacles) {
+      const x = box.x * zoom + tx;
+      const y = box.y * zoom + ty;
+      const bw = box.w * zoom;
+      const bh = box.h * zoom;
+      if (x > w || y > h || x + bw < 0 || y + bh < 0) continue;
+      ctx.fillRect(x, y, bw, bh);
+    }
+    ctx.restore();
 
     // Brackets take the space they need out of the guides before drawing into it: a guide
     // running along a dimension line, or through its number, hides the measurement behind
@@ -423,7 +444,7 @@ export function HighlightLayer({
       ctx.restore();
     }
     for (const bracket of brackets) drawMeasure(ctx, bracket, guideColor);
-  }, [tx, ty, zoom, w, h, guides, measures, active, guideColor, guideWeakColor]);
+  }, [tx, ty, zoom, w, h, guides, measures, obstacles, active, guideColor, guideWeakColor]);
 
   return <canvas ref={ref} className="layer" style={{ width: w, height: h }} />;
 }
