@@ -113,7 +113,9 @@ draws, and the numbered step climbs by whole subdivisions until the labels are f
 read. At a grid of 25 the ruler counts 0, 100, 200 — never 0, 50, 100 — so a number on the gutter
 always names a line that is on the sheet. Whatever is selected is bracketed on both strips — a bar
 along the inner edge closed by a tick at each end, rather than a wash over the whole strip, so the
-numbers under it stay readable and the two ends stay exact.
+numbers under it stay readable and the two ends stay exact. The bracket takes the same padded edge
+as the dashed selection outline, since that outline is what the eye reads as the edge of a
+selection; two marks for one edge that disagree look like a mistake, not like a measurement.
 
 They take layout space rather than floating over the canvas: `.surface` is inset by exactly their
 width, so its client rect stays the single definition of screen space and pointer coordinates, the

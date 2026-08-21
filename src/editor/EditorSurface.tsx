@@ -812,11 +812,24 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
   // What the selection spans, marked out on the rulers so the gutters read the drawing and
   // not just the viewport. Folded over the selection on every render — which is what the
   // selection changing and a drag both cause anyway — rather than over the sheet.
+  //
+  // Grown by the same pad as the dashed outline, because that outline is what the eye
+  // reads as the edge of the selection: a bracket on the bare bounds ends a couple of
+  // pixels inside it at every zoom, and two marks for one edge that disagree look like a
+  // mistake rather than like a measurement.
   let selectionExtent: Rect | null = null;
   for (const id of controller.selection) {
     const info = graph.nodes.get(id) ?? graph.connections.get(id);
     if (!info) continue;
     selectionExtent = selectionExtent ? rectUnion(selectionExtent, info.bounds) : info.bounds;
+  }
+  if (selectionExtent) {
+    selectionExtent = {
+      x: selectionExtent.x - NODE_OUTLINE_PAD,
+      y: selectionExtent.y - NODE_OUTLINE_PAD,
+      w: selectionExtent.w + NODE_OUTLINE_PAD * 2,
+      h: selectionExtent.h + NODE_OUTLINE_PAD * 2,
+    };
   }
 
   return (
