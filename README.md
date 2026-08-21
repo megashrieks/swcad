@@ -161,6 +161,12 @@ A component can overrule the rule with an [`align` annotation](docs/authoring-co
 `{ "kind": "align", "snap": false }` on a painted decoration keeps it out of the guides, and
 `"snap": true` on invisible geometry puts it in.
 
+A guide runs the full height of the sheet because it is a claim about a coordinate, not about a
+stretch of empty space — but it has nothing to say where something is already drawn. So the
+components are punched out of it, outline and all, and each guide reads as the run of clear space
+between the things it lines up. The component being placed is punched out too: its ghost is as
+much a drawing as the rest.
+
 ## Selecting
 
 Selection follows the drawing, never the box around it.

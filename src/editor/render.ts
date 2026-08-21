@@ -47,12 +47,19 @@ function cloneWith(
 }
 
 /**
+ * Breathing room between a node's bounds and the marker drawn around it, in world units.
+ *
+ * The dotted outline reads as the edge of the item, so anything that has to stay off a
+ * component — the alignment guides, most of all — clears this rather than the bare bounds.
+ */
+export const NODE_OUTLINE_PAD = 2;
+
+/**
  * Serialize a resolved node, applying script styles, label bindings and hit areas.
  *
  * `hiddenId` blanks one element without removing it — the inline label editor uses it so
  * the drawn text does not show through the transparent input sitting on top of it.
- */
-export function nodeMarkup(info: ResolvedNodeInfo, hiddenId?: string | null): string {
+ */export function nodeMarkup(info: ResolvedNodeInfo, hiddenId?: string | null): string {
   const slots = slotElements(info);
   const overrides = new Map<string, Record<string, string>>();
   for (const [slot, attrs] of Object.entries(info.styles ?? {})) {

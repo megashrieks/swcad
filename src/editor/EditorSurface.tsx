@@ -22,7 +22,7 @@ import type { Node } from '@core/model/types';
 import type { ComponentEntry } from '@core/library/registry';
 import type { EditorController, DragState, SnapResult, ToolId } from './EditorController';
 import { GridLayer, HighlightLayer } from './layers/CanvasLayers';
-import { connectionMarkup, nodeMarkup, nodeTransform, previewMarkup } from './render';
+import { connectionMarkup, nodeMarkup, nodeTransform, previewMarkup, NODE_OUTLINE_PAD } from './render';
 
 export interface EditorSurfaceProps {
   controller: EditorController;
@@ -117,14 +117,15 @@ const zoomFactor = (dy: number, perPixel: number): number =>
 function ghostPlacement(
   controller: EditorController,
   world: Vec | null,
-): { entry: ComponentEntry; markup: string; pos: Vec; snapped: SnapResult } | null {
+): { entry: ComponentEntry; markup: string; pos: Vec; box: Rect; snapped: SnapResult } | null {
   if (controller.tool !== 'place' || !controller.placeRef || !world) return null;
   const entry = controller.registry.get(controller.placeRef);
   if (!entry || entry.def.connector) return null;
   const { markup, box } = previewMarkup(entry, controller.registry);
   const at = { x: world.x + box.x, y: world.y + box.y, w: box.w, h: box.h };
   const snapped = controller.snap(world, [], { xs: [], ys: [] }, at);
-  return { entry, markup, pos: snapped.pos, snapped };
+  const pos = snapped.pos;
+  return { entry, markup, pos, box: { x: pos.x + box.x, y: pos.y + box.y, w: box.w, h: box.h }, snapped };
 }
 
 /**
@@ -771,10 +772,17 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
 
   // What the guides have to stay out of. Connections are left out: a route is mostly empty
   // space, and punching its bounding box out would cut a hole the size of the whole detour.
-  const obstacles = useMemo(
-    () => graph.order.map((id) => graph.nodes.get(id)?.bounds).filter((b): b is Rect => b !== undefined),
-    [graph],
-  );
+  // The placement ghost counts as drawn — a guide crossing it would read as a line through
+  // the component about to be dropped.
+  const placement = drag ? null : ghostPlacement(controller, controller.cursorWorld);
+  const ghostBox = placement?.box ?? null;
+  const ghostKey = ghostBox ? `${ghostBox.x} ${ghostBox.y} ${ghostBox.w} ${ghostBox.h}` : '';
+  const obstacles = useMemo(() => {
+    const boxes = graph.order.map((id) => graph.nodes.get(id)?.bounds).filter((b): b is Rect => b !== undefined);
+    if (ghostBox) boxes.push(ghostBox);
+    return boxes;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ghostKey stands in for ghostBox
+  }, [graph, ghostKey]);
 
   return (
     <div
@@ -838,10 +846,10 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
               <rect
                 key={`sel-${id}`}
                 className="selection-outline"
-                x={b.x - 2}
-                y={b.y - 2}
-                width={b.w + 4}
-                height={b.h + 4}
+                x={b.x - NODE_OUTLINE_PAD}
+                y={b.y - NODE_OUTLINE_PAD}
+                width={b.w + NODE_OUTLINE_PAD * 2}
+                height={b.h + NODE_OUTLINE_PAD * 2}
                 vectorEffect="non-scaling-stroke"
               />
             );
@@ -973,7 +981,6 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
           */}
           {!drag && controller.tool === 'place' && controller.placeRef
             ? (() => {
-                const placement = ghostPlacement(controller, controller.cursorWorld);
                 if (!placement) return null;
                 return (
                   <RawGroup

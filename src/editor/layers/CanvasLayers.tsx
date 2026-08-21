@@ -3,6 +3,7 @@ import type { GridConfig } from '@core/model/types';
 import type { Rect } from '@core/geometry/index';
 import { paletteColor, useCanvasPalette } from '../../ui/canvasPalette';
 import type { Guide, Measure, Viewport } from '../EditorController';
+import { NODE_OUTLINE_PAD } from '../render';
 
 interface Size {
   w: number;
@@ -418,16 +419,19 @@ export function HighlightLayer({
     // not about a stretch of empty space — but it has nothing to say where a component is
     // already drawn, and passing behind one only shows through anything unfilled. So the
     // components are punched out of it, and each guide reads as the run of clear space
-    // between the things it lines up.
+    // between the things it lines up. The punch clears the selection outline too: that
+    // dotted rect is where the eye puts the edge of the item.
     ctx.save();
     ctx.globalCompositeOperation = 'destination-out';
     for (const box of obstacles) {
-      const x = box.x * zoom + tx;
-      const y = box.y * zoom + ty;
-      const bw = box.w * zoom;
-      const bh = box.h * zoom;
-      if (x > w || y > h || x + bw < 0 || y + bh < 0) continue;
-      ctx.fillRect(x, y, bw, bh);
+      // Rounded outwards: half a pixel of guide left along an edge reads as a line touching
+      // the drawing, which is the thing being avoided.
+      const x0 = Math.floor((box.x - NODE_OUTLINE_PAD) * zoom + tx);
+      const y0 = Math.floor((box.y - NODE_OUTLINE_PAD) * zoom + ty);
+      const x1 = Math.ceil((box.x + box.w + NODE_OUTLINE_PAD) * zoom + tx);
+      const y1 = Math.ceil((box.y + box.h + NODE_OUTLINE_PAD) * zoom + ty);
+      if (x0 > w || y0 > h || x1 < 0 || y1 < 0) continue;
+      ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
     }
     ctx.restore();
 
