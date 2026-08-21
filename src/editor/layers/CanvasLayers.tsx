@@ -95,6 +95,17 @@ export function GridLayer({
     const worldRight = (w - tx) / zoom;
     const worldBottom = (h - ty) / zoom;
 
+    /**
+     * A lattice line in the surface's very first pixel is dropped.
+     *
+     * That pixel sits immediately against whatever draws the edge of the canvas — the
+     * ruler's rule, in the usual case — so a line landing there does not read as a line at
+     * all, it reads as the edge being twice as thick on that side. Which side that happens
+     * on is pure luck of the pan, so the two edges of the drawing end up different weights.
+     * Nothing is lost: the line is flush with the boundary either way.
+     */
+    const offEdge = (v: number): boolean => v >= 1;
+
     const drawLines = (spacing: number, color: string, width: number): void => {
       ctx.beginPath();
       ctx.strokeStyle = color;
@@ -102,12 +113,14 @@ export function GridLayer({
       const startX = Math.floor((worldLeft - originX) / spacing) * spacing + originX;
       for (let x = startX; x <= worldRight; x += spacing) {
         const sx = crisp(x * zoom + tx);
+        if (!offEdge(sx)) continue;
         ctx.moveTo(sx, 0);
         ctx.lineTo(sx, h);
       }
       const startY = Math.floor((worldTop - originY) / spacing) * spacing + originY;
       for (let y = startY; y <= worldBottom; y += spacing) {
         const sy = crisp(y * zoom + ty);
+        if (!offEdge(sy)) continue;
         ctx.moveTo(0, sy);
         ctx.lineTo(w, sy);
       }
@@ -124,10 +137,14 @@ export function GridLayer({
     ctx.lineWidth = 1;
     const ox = crisp(originX * zoom + tx);
     const oy = crisp(originY * zoom + ty);
-    ctx.moveTo(ox, 0);
-    ctx.lineTo(ox, h);
-    ctx.moveTo(0, oy);
-    ctx.lineTo(w, oy);
+    if (offEdge(ox)) {
+      ctx.moveTo(ox, 0);
+      ctx.lineTo(ox, h);
+    }
+    if (offEdge(oy)) {
+      ctx.moveTo(0, oy);
+      ctx.lineTo(w, oy);
+    }
     ctx.stroke();
   }, [
     tx,
@@ -168,6 +185,9 @@ const RULER_LABEL_PITCH = 58;
 /** Tick lengths, measured in from the edge the drawing is on. */
 const RULER_TICK_MINOR = 4;
 const RULER_TICK_MAJOR = 8;
+/** The selection bracket: how thick its bar is, and how far its end ticks reach up. */
+const MARK_BAR = 2;
+const MARK_CAP = 11;
 
 /** `-40`, `1.5` — a world coordinate, at the precision the sheet is drawn to. */
 function rulerLabel(value: number): string {
@@ -253,16 +273,6 @@ export function RulerLayer({
       ctx.fillStyle = bg;
       ctx.fillRect(...rect(0, 0, length, RULER_SIZE));
 
-      if (from !== null && span !== null && span >= 0) {
-        const a = from * zoom + pan;
-        const b = a + span * zoom;
-        ctx.save();
-        ctx.globalAlpha = 0.22;
-        ctx.fillStyle = markColor;
-        ctx.fillRect(...rect(a, 0, Math.max(b - a, 1), RULER_SIZE));
-        ctx.restore();
-      }
-
       const worldFrom = (0 - pan) / zoom;
       const worldTo = (length - pan) / zoom;
       const start = Math.floor((worldFrom - origin) / step) * step + origin;
@@ -305,6 +315,25 @@ export function RulerLayer({
       ctx.moveTo(...at(0, RULER_SIZE - 0.5));
       ctx.lineTo(...at(length, RULER_SIZE - 0.5));
       ctx.stroke();
+
+      // What the selection spans, bracketed rather than washed over: a bar along the inner
+      // edge closed by a tick at each end, so the gutter still reads as a scale — the
+      // numbers under it stay legible and the two ends stay exact.
+      if (from !== null && span !== null && span >= 0) {
+        const a = from * zoom + pan;
+        const b = Math.max(a + span * zoom, a + 1);
+        ctx.fillStyle = markColor;
+        ctx.fillRect(...rect(a, RULER_SIZE - MARK_BAR, b - a, MARK_BAR));
+        ctx.beginPath();
+        ctx.strokeStyle = markColor;
+        ctx.lineWidth = 1;
+        for (const edge of [a, b]) {
+          const s = crisp(edge);
+          ctx.moveTo(...at(s, RULER_SIZE - MARK_CAP));
+          ctx.lineTo(...at(s, RULER_SIZE));
+        }
+        ctx.stroke();
+      }
     };
 
     draw(topCtx, true, w, tx, originX, exX, exW);

@@ -41,7 +41,7 @@ ref or a file the package does not have are rewritten to what is actually on scr
 | Feature | Notes |
 |---|---|
 | Custom grid | Cell size, subdivisions, origin, units, visibility, snap toggle; drawn on a canvas layer with level-of-detail so it stays cheap at any zoom |
-| Rulers | Coordinate gutters down the top and left edges, counting in grid steps rather than round decimals, so every number on them names a line that is actually drawn. The selection is marked out as a band on both. Toggled from **Aids ▸ Rulers** |
+| Rulers | Coordinate gutters down the top and left edges, counting in grid steps rather than round decimals, so every number on them names a line that is actually drawn. The selection is bracketed on both. Toggled from **Aids ▸ Rulers** |
 | Alignment highlighting | Every node contributes the edges and centre of its **painted** geometry, plus its port coordinates, to a global `AlignmentIndex`; while placing, dragging or connecting, matching rows/columns light up and snap. Nearby lines stay faint; every line the moving geometry actually lands on — edge to edge, centre to centre, port to port, several at once — is drawn bright. With **Snap to grid** on, a guide can only win if the resulting position is still on the grid lattice, so alignment can never drag a node off-grid |
 | Optional page | ISO A0–A5, ANSI A–E, Letter, Tabloid or custom; orientation, margins, units-per-mm, blueprint frame with zone ticks and labels. Off by default (infinite canvas) |
 | Legend / title block | A normal library component pinned bottom-right of the page, bound to document fields. Only available when a page is selected. The same component can also be dropped on the sheet, where each copy carries its own title/author/date/rev/size/sheet and falls back to the document metadata while a field is left blank |
@@ -111,13 +111,19 @@ Two gutters, 20px along the top and left edges, counting in world coordinates. T
 the **grid**, not by round decimals: the tick spacing is the finest lattice line the grid still
 draws, and the numbered step climbs by whole subdivisions until the labels are far enough apart to
 read. At a grid of 25 the ruler counts 0, 100, 200 — never 0, 50, 100 — so a number on the gutter
-always names a line that is on the sheet. Whatever is selected is marked out as a band on both
-strips, so the gutters read the drawing and not just the viewport.
+always names a line that is on the sheet. Whatever is selected is bracketed on both strips — a bar
+along the inner edge closed by a tick at each end, rather than a wash over the whole strip, so the
+numbers under it stay readable and the two ends stay exact.
 
 They take layout space rather than floating over the canvas: `.surface` is inset by exactly their
 width, so its client rect stays the single definition of screen space and pointer coordinates, the
 viewport size and every snap keep working with no gutter-sized correction anywhere. **Aids ▸
 Rulers** turns them off, and the drawing keeps its middle in the middle when they go.
+
+The gutter is the paper's own colour: only the rule along its inner edge, the ticks and the numbers
+say where it ends. That rule is the edge of the drawing, so the grid drops any lattice line that
+would land in the surface's first pixel — otherwise one edge comes out a pixel thicker than the
+other, purely by luck of the pan. The palette gave up its own right-hand rule for the same reason.
 
 ## Placing
 

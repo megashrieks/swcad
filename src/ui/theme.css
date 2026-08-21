@@ -363,16 +363,6 @@ body {
   overflow-y: auto;
   min-height: 0;
 }
-
-/*
- * Where a panel meets the drawing it gets a rule of its own. The palette and the canvas are
- * a shade apart at most in some themes, and without an edge the sheet appears to start
- * somewhere in the middle of the component list.
- */
-.editor-layout .side.left {
-  border-right: 1px solid var(--line-strong);
-}
-
 /* Nothing open in the component editor: no palette either, so the empty state gets the
    whole width. */
 .editor-layout.no-palette {
