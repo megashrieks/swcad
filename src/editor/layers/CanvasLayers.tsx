@@ -228,7 +228,6 @@ interface MeasureLayout {
   textW: number;
   /** Whether the number sits in a break in the line, or above a line too short to break. */
   inline: boolean;
-  role: Measure['role'];
   at: (along: number, across: number) => [number, number];
   box: (along0: number, across0: number, along1: number, across1: number) => [number, number, number, number];
 }
@@ -273,7 +272,6 @@ function layoutMeasure(
     label,
     textW,
     inline: span >= textW + 2 * (MEASURE_TEXT_PAD + MEASURE_ARROW + 2),
-    role: measure.role,
     at,
     box,
   };
@@ -308,9 +306,9 @@ function drawMeasure(ctx: CanvasRenderingContext2D, m: MeasureLayout, color: str
   ctx.fillStyle = color;
   ctx.lineWidth = 1;
   ctx.setLineDash([]);
-  // The gap being copied is context, not the answer, so it reads as an echo of the one
-  // the pointer is making.
-  ctx.globalAlpha = m.role === 'reference' ? 0.5 : 1;
+  // Both brackets are drawn alike. The pair is the point — a gap matching another gap —
+  // and holding one back would say the measurement it carries is worth less, when it is
+  // the reason the other one is on screen at all.
 
   const segment = (u1: number, v1: number, u2: number, v2: number): void => {
     const [x1, y1] = m.at(u1, v1);

@@ -25,8 +25,6 @@ export interface Measure {
   /** Where on the cross axis the bracket sits — the middle of the band both items share. */
   at: number;
   distance: number;
-  /** `active` is a gap the moving item makes; `reference` is the gap it is copying. */
-  role: 'active' | 'reference';
 }
 
 export interface SpacingOptions {
@@ -150,13 +148,12 @@ export function spacingShift(
   return best;
 }
 
-const bracket = (axis: Axis, gap: Gap, role: Measure['role']): Measure => ({
+const bracket = (axis: Axis, gap: Gap): Measure => ({
   axis,
   from: gap.from,
   to: gap.to,
   at: gap.at,
   distance: gap.size,
-  role,
 });
 
 /** The reference nearest the box, among those the gap matches. */
@@ -186,20 +183,20 @@ export function spacingMeasures(box: Rect, peers: readonly Rect[], opt: SpacingO
     const { gapBefore, gapAfter } = row;
 
     // Evenly spaced between two neighbours: both gaps are the box's own, and each is the
-    // other's reference, so both get the strong bracket.
+    // other's reference.
     if (gapBefore && gapAfter && Math.abs(gapBefore.size - gapAfter.size) <= opt.epsilon) {
-      out.push(bracket(axis, gapBefore, 'active'), bracket(axis, gapAfter, 'active'));
+      out.push(bracket(axis, gapBefore), bracket(axis, gapAfter));
       continue;
     }
 
     const beforeCopy = copyOf(box, gapBefore, row.references, axis, opt.epsilon);
     if (gapBefore && beforeCopy) {
-      out.push(bracket(axis, gapBefore, 'active'), bracket(axis, beforeCopy, 'reference'));
+      out.push(bracket(axis, gapBefore), bracket(axis, beforeCopy));
       continue;
     }
     const afterCopy = copyOf(box, gapAfter, row.references, axis, opt.epsilon);
     if (gapAfter && afterCopy) {
-      out.push(bracket(axis, gapAfter, 'active'), bracket(axis, afterCopy, 'reference'));
+      out.push(bracket(axis, gapAfter), bracket(axis, afterCopy));
     }
   }
   return out;

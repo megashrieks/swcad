@@ -125,10 +125,11 @@ Alignment guides answer "is this edge level with that one". They say nothing abo
 which is what actually makes a row look deliberate: the gaps between things being the same
 number. So while a node is being placed or dragged, the editor also looks at the gap it is about
 to make with its nearest neighbour, and if that gap matches one already on the sheet it pulls the
-node onto it and draws both gaps as CAD-style **dimension brackets** — `|<--- 97 --->|` for the
-gap being made, and the same bracket, half as bright, over the gap it is copying. Landing exactly
-halfway between two neighbours is the same rule with no third component involved: both gaps are
-the node's own, so both are drawn at full strength.
+node onto it and draws both gaps as CAD-style **dimension brackets** — `|<--- 97 --->|` over the
+gap being made and the same bracket over the gap it is copying. The two are drawn alike: the pair
+is the point, and holding the reference back would say its measurement is worth less when it is
+the reason the other bracket is on screen at all. Landing exactly halfway between two neighbours
+is the same rule with no third component involved — both gaps are the node's own.
 
 A gap is only compared against things sharing a band with it — a horizontal gap needs the two
 items to overlap vertically — so a bracket always belongs to a row or a column instead of
