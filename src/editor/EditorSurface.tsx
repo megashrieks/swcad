@@ -21,7 +21,7 @@ import { pickGroupMember, portGroupIds } from '@core/model/graph';
 import type { Node } from '@core/model/types';
 import type { ComponentEntry } from '@core/library/registry';
 import type { EditorController, DragState, SnapResult, ToolId } from './EditorController';
-import { GridLayer, HighlightLayer } from './layers/CanvasLayers';
+import { GridLayer, HighlightLayer, RulerLayer } from './layers/CanvasLayers';
 import {
   connectionMarkup,
   connectorInk,
@@ -792,8 +792,7 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
   // they are the part a guide most obviously spoils.
   // The placement ghost counts as drawn — a guide crossing it would read as a line through
   // the component about to be dropped.
-  const placement = drag ? null : ghostPlacement(controller, controller.cursorWorld);
-  const ghostBox = placement?.box ?? null;
+  const placement = drag ? null : ghostPlacement(controller, controller.cursorWorld);  const ghostBox = placement?.box ?? null;
   const ghostKey = ghostBox ? `${ghostBox.x} ${ghostBox.y} ${ghostBox.w} ${ghostBox.h}` : '';
   const { obstacles, ink } = useMemo(() => {
     const boxes = graph.order.map((id) => graph.nodes.get(id)?.bounds).filter((b): b is Rect => b !== undefined);
@@ -810,221 +809,236 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ghostKey stands in for ghostBox
   }, [graph, ghostKey]);
 
+  // What the selection spans, marked out on the rulers so the gutters read the drawing and
+  // not just the viewport. Folded over the selection on every render — which is what the
+  // selection changing and a drag both cause anyway — rather than over the sheet.
+  let selectionExtent: Rect | null = null;
+  for (const id of controller.selection) {
+    const info = graph.nodes.get(id) ?? graph.connections.get(id);
+    if (!info) continue;
+    selectionExtent = selectionExtent ? rectUnion(selectionExtent, info.bounds) : info.bounds;
+  }
+
   return (
-    <div
-      ref={hostRef}
-      className={`surface tool-${controller.tool}${!drag && controller.hoverPort ? ' hover-port' : ''}`}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-      onPointerLeave={onPointerLeave}
-      onDoubleClick={onDoubleClick}
-      onContextMenu={(e) => e.preventDefault()}
-    >
-      <GridLayer grid={doc.grid} viewport={viewport} size={size} page={pageBox} />
-      <HighlightLayer
-        viewport={viewport}
-        size={size}
-        guides={controller.guides}
-        measures={controller.measures}
-        obstacles={obstacles}
-        ink={ink}
-        active={highlightActive}
-      />
+    <>
+      {controller.showRulers ? (
+        <RulerLayer grid={doc.grid} viewport={viewport} size={size} extent={selectionExtent} />
+      ) : null}
+      <div
+        ref={hostRef}
+        className={`surface tool-${controller.tool}${controller.showRulers ? ' has-rulers' : ''}${!drag && controller.hoverPort ? ' hover-port' : ''}`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onPointerLeave={onPointerLeave}
+        onDoubleClick={onDoubleClick}
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        <GridLayer grid={doc.grid} viewport={viewport} size={size} page={pageBox} />
+        <HighlightLayer
+          viewport={viewport}
+          size={size}
+          guides={controller.guides}
+          measures={controller.measures}
+          obstacles={obstacles}
+          ink={ink}
+          active={highlightActive}
+        />
 
-      <svg className="layer content" width={size.w} height={size.h}>
-        <g transform={`translate(${viewport.tx} ${viewport.ty}) scale(${viewport.zoom})`}>
-          {underlay}
+        <svg className="layer content" width={size.w} height={size.h}>
+          <g transform={`translate(${viewport.tx} ${viewport.ty}) scale(${viewport.zoom})`}>
+            {underlay}
 
-          {graph.connectionOrder.map((id) => {
-            const info = graph.connections.get(id)!;
-            return (
-              <RawGroup
-                key={id}
-                data-connection={id}
-                className={`connection${controller.selection.has(id) ? ' is-selected' : ''}`}
-                markup={connectionMarkup(info)}
-              />
-            );
-          })}
+            {graph.connectionOrder.map((id) => {
+              const info = graph.connections.get(id)!;
+              return (
+                <RawGroup
+                  key={id}
+                  data-connection={id}
+                  className={`connection${controller.selection.has(id) ? ' is-selected' : ''}`}
+                  markup={connectionMarkup(info)}
+                />
+              );
+            })}
 
-          {graph.order.map((id) => {
-            const info = graph.nodes.get(id)!;
-            if (info.node.hidden) return null;
-            const editingHere = controller.editingLabel?.nodeId === id ? controller.editingLabel.elementId : null;
-            return (
-              <RawGroup
-                key={id}
-                data-node={id}
-                className={`node${controller.selection.has(id) ? ' is-selected' : ''}${controller.hoverId === id ? ' is-hover' : ''}`}
-                transform={nodeTransform(info)}
-                markup={nodeMarkup(info, editingHere)}
-              />
-            );
-          })}
+            {graph.order.map((id) => {
+              const info = graph.nodes.get(id)!;
+              if (info.node.hidden) return null;
+              const editingHere = controller.editingLabel?.nodeId === id ? controller.editingLabel.elementId : null;
+              return (
+                <RawGroup
+                  key={id}
+                  data-node={id}
+                  className={`node${controller.selection.has(id) ? ' is-selected' : ''}${controller.hoverId === id ? ' is-hover' : ''}`}
+                  transform={nodeTransform(info)}
+                  markup={nodeMarkup(info, editingHere)}
+                />
+              );
+            })}
 
-          {/* selection outlines */}
-          {(controller.showNodeOutline ? [...controller.selection] : []).map((id) => {
-            const info = graph.nodes.get(id) ?? graph.connections.get(id);
-            if (!info) return null;
-            const b = info.bounds;
-            return (
-              <rect
-                key={`sel-${id}`}
-                className="selection-outline"
-                x={b.x - NODE_OUTLINE_PAD}
-                y={b.y - NODE_OUTLINE_PAD}
-                width={b.w + NODE_OUTLINE_PAD * 2}
-                height={b.h + NODE_OUTLINE_PAD * 2}
-                vectorEffect="non-scaling-stroke"
-              />
-            );
-          })}
+            {/* selection outlines */}
+            {(controller.showNodeOutline ? [...controller.selection] : []).map((id) => {
+              const info = graph.nodes.get(id) ?? graph.connections.get(id);
+              if (!info) return null;
+              const b = info.bounds;
+              return (
+                <rect
+                  key={`sel-${id}`}
+                  className="selection-outline"
+                  x={b.x - NODE_OUTLINE_PAD}
+                  y={b.y - NODE_OUTLINE_PAD}
+                  width={b.w + NODE_OUTLINE_PAD * 2}
+                  height={b.h + NODE_OUTLINE_PAD * 2}
+                  vectorEffect="non-scaling-stroke"
+                />
+              );
+            })}
 
-          {/* resize handles */}
-          {controller.selectedNodes().flatMap((info) =>
-            info.handles.map((handle) => (
-              <rect
-                key={`h-${info.id}-${handle.id}`}
-                className="handle"
-                x={handle.pos.x - 4 / viewport.zoom}
-                y={handle.pos.y - 4 / viewport.zoom}
-                width={8 / viewport.zoom}
-                height={8 / viewport.zoom}
-              />
-            )),
-          )}
+            {/* resize handles */}
+            {controller.selectedNodes().flatMap((info) =>
+              info.handles.map((handle) => (
+                <rect
+                  key={`h-${info.id}-${handle.id}`}
+                  className="handle"
+                  x={handle.pos.x - 4 / viewport.zoom}
+                  y={handle.pos.y - 4 / viewport.zoom}
+                  width={8 / viewport.zoom}
+                  height={8 / viewport.zoom}
+                />
+              )),
+            )}
 
-          {/* port markers: a node shows its ports while the pointer is inside its bounds (or
-              while a connector is being dragged into them); otherwise only the port under the
-              pointer is drawn, so the sheet stays quiet. The component editor reveals them all. */}
-          {(() => {
-            const connecting = controller.tool === 'connect' || drag?.kind === 'connect';
-            const reveal = controller.revealAnnotations;
-            const showAll = connecting || controller.showPorts;
-            // Only the tools that can start a connector get the hover affordance.
-            const canGrab = controller.tool === 'select' || controller.tool === 'connect';
-            const hover = drag || !canGrab ? null : controller.hoverPort;
-            if (!showAll && !hover && !reveal) return null;
-            const cursor = controller.cursorWorld;
-            // Reach matches the port pick radius, so a port sitting on the border is visible
-            // wherever it can still be grabbed.
-            const reach = 10 / viewport.zoom;
-            const withinBounds = (b: Rect): boolean =>
-              cursor !== null &&
-              cursor.x >= b.x - reach &&
-              cursor.x <= b.x + b.w + reach &&
-              cursor.y >= b.y - reach &&
-              cursor.y <= b.y + b.h + reach;
-            return [...graph.nodes.values()].flatMap((info) => {
-              const near = reveal || withinBounds(info.bounds);
-              return info.ports.flatMap((port) => {
-                const active =
-                  drag?.kind === 'connect' && drag.hoverPort?.id === port.id && drag.hoverPort?.nodeId === port.nodeId;
-                const hovered = hover?.id === port.id && hover?.nodeId === port.nodeId;
-                if (!hovered && !active && !(showAll && near)) return [];
-                const emphasis = active || hovered;
-                if (port.outline) {
-                  // A surface port is a whole stroke, so it is only drawn while connecting or
-                  // while the pointer is on it; otherwise every node would read as highlighted.
-                  if (!reveal && !connecting && !hovered) return [];
-                  const aim = active && drag?.kind === 'connect' && drag.fromPos ? drag.fromPos : controller.cursorWorld;
-                  const touch = emphasis && aim ? outlineAttach(port.outline, aim, controller.attachGrid()).pos : null;
-                  return [
-                    <g key={`port-${info.id}-${port.id}`}>
-                      <path
-                        className={`port-outline${active ? ' is-active' : ''}${hovered ? ' is-hover' : ''}${port.connected ? ' is-connected' : ''}`}
-                        d={outlinePath(port.outline)}
-                        vectorEffect="non-scaling-stroke"
-                      />
-                      {touch && (
-                        <circle
-                          className={`port-marker is-surface${active ? ' is-active' : ''}${hovered ? ' is-hover' : ''}`}
-                          cx={touch.x}
-                          cy={touch.y}
-                          r={5 / viewport.zoom}
+            {/* port markers: a node shows its ports while the pointer is inside its bounds (or
+                while a connector is being dragged into them); otherwise only the port under the
+                pointer is drawn, so the sheet stays quiet. The component editor reveals them all. */}
+            {(() => {
+              const connecting = controller.tool === 'connect' || drag?.kind === 'connect';
+              const reveal = controller.revealAnnotations;
+              const showAll = connecting || controller.showPorts;
+              // Only the tools that can start a connector get the hover affordance.
+              const canGrab = controller.tool === 'select' || controller.tool === 'connect';
+              const hover = drag || !canGrab ? null : controller.hoverPort;
+              if (!showAll && !hover && !reveal) return null;
+              const cursor = controller.cursorWorld;
+              // Reach matches the port pick radius, so a port sitting on the border is visible
+              // wherever it can still be grabbed.
+              const reach = 10 / viewport.zoom;
+              const withinBounds = (b: Rect): boolean =>
+                cursor !== null &&
+                cursor.x >= b.x - reach &&
+                cursor.x <= b.x + b.w + reach &&
+                cursor.y >= b.y - reach &&
+                cursor.y <= b.y + b.h + reach;
+              return [...graph.nodes.values()].flatMap((info) => {
+                const near = reveal || withinBounds(info.bounds);
+                return info.ports.flatMap((port) => {
+                  const active =
+                    drag?.kind === 'connect' && drag.hoverPort?.id === port.id && drag.hoverPort?.nodeId === port.nodeId;
+                  const hovered = hover?.id === port.id && hover?.nodeId === port.nodeId;
+                  if (!hovered && !active && !(showAll && near)) return [];
+                  const emphasis = active || hovered;
+                  if (port.outline) {
+                    // A surface port is a whole stroke, so it is only drawn while connecting or
+                    // while the pointer is on it; otherwise every node would read as highlighted.
+                    if (!reveal && !connecting && !hovered) return [];
+                    const aim = active && drag?.kind === 'connect' && drag.fromPos ? drag.fromPos : controller.cursorWorld;
+                    const touch = emphasis && aim ? outlineAttach(port.outline, aim, controller.attachGrid()).pos : null;
+                    return [
+                      <g key={`port-${info.id}-${port.id}`}>
+                        <path
+                          className={`port-outline${active ? ' is-active' : ''}${hovered ? ' is-hover' : ''}${port.connected ? ' is-connected' : ''}`}
+                          d={outlinePath(port.outline)}
+                          vectorEffect="non-scaling-stroke"
                         />
-                      )}
-                    </g>,
+                        {touch && (
+                          <circle
+                            className={`port-marker is-surface${active ? ' is-active' : ''}${hovered ? ' is-hover' : ''}`}
+                            cx={touch.x}
+                            cy={touch.y}
+                            r={5 / viewport.zoom}
+                          />
+                        )}
+                      </g>,
+                    ];
+                  }
+                  return [
+                    <circle
+                      key={`port-${info.id}-${port.id}`}
+                      className={`port-marker${active ? ' is-active' : ''}${hovered ? ' is-hover' : ''}${port.connected ? ' is-connected' : ''}`}
+                      cx={port.pos.x}
+                      cy={port.pos.y}
+                      r={(emphasis ? 7 : 5) / viewport.zoom}
+                    />,
                   ];
-                }
-                return [
-                  <circle
-                    key={`port-${info.id}-${port.id}`}
-                    className={`port-marker${active ? ' is-active' : ''}${hovered ? ' is-hover' : ''}${port.connected ? ' is-connected' : ''}`}
-                    cx={port.pos.x}
-                    cy={port.pos.y}
-                    r={(emphasis ? 7 : 5) / viewport.zoom}
-                  />,
-                ];
+                });
               });
-            });
-          })()}
+            })()}
 
-          {/* anchors: attachment points of the selected nodes, or of every node when the
-              component editor is showing what the annotations declare */}
-          {(controller.revealAnnotations ? [...graph.nodes.values()] : controller.selectedNodes()).flatMap((info) =>
-            info.anchors.map((anchor) => (
+            {/* anchors: attachment points of the selected nodes, or of every node when the
+                component editor is showing what the annotations declare */}
+            {(controller.revealAnnotations ? [...graph.nodes.values()] : controller.selectedNodes()).flatMap((info) =>
+              info.anchors.map((anchor) => (
+                <rect
+                  key={`anchor-${info.id}-${anchor.id}`}
+                  className="anchor-marker"
+                  x={anchor.pos.x - 3 / viewport.zoom}
+                  y={anchor.pos.y - 3 / viewport.zoom}
+                  width={6 / viewport.zoom}
+                  height={6 / viewport.zoom}
+                />
+              )),
+            )}
+
+            {drag?.kind === 'marquee' && drag.moved && (
               <rect
-                key={`anchor-${info.id}-${anchor.id}`}
-                className="anchor-marker"
-                x={anchor.pos.x - 3 / viewport.zoom}
-                y={anchor.pos.y - 3 / viewport.zoom}
-                width={6 / viewport.zoom}
-                height={6 / viewport.zoom}
-              />
-            )),
-          )}
-
-          {drag?.kind === 'marquee' && drag.moved && (
-            <rect
-              className="marquee"
-              {...toRectProps(drag.start, drag.current)}
-              vectorEffect="non-scaling-stroke"
-            />
-          )}
-
-          {drag?.kind === 'connect' && drag.fromPos && (() => {
-            const line = connectPreview(controller, drag);
-            return (
-              <line
-                className="connect-preview"
-                x1={line.a.x}
-                y1={line.a.y}
-                x2={line.b.x}
-                y2={line.b.y}
+                className="marquee"
+                {...toRectProps(drag.start, drag.current)}
                 vectorEffect="non-scaling-stroke"
               />
-            );
-          })()}
+            )}
 
-          {/*
-            The placement ghost: what is about to be dropped, drawn where it would land.
-            An armed component is otherwise invisible on the canvas — the only sign is a lit
-            palette tile — so a click is a guess about both what and where. It is the real
-            drawing at the real snapped position rather than a box, because the two differ:
-            a component may hang around its origin instead of filling its instance box.
-          */}
-          {!drag && controller.tool === 'place' && controller.placeRef
-            ? (() => {
-                if (!placement) return null;
-                return (
-                  <RawGroup
-                    className="place-ghost"
-                    transform={`translate(${placement.pos.x} ${placement.pos.y})`}
-                    markup={placement.markup}
-                  />
-                );
-              })()
-            : null}
+            {drag?.kind === 'connect' && drag.fromPos && (() => {
+              const line = connectPreview(controller, drag);
+              return (
+                <line
+                  className="connect-preview"
+                  x1={line.a.x}
+                  y1={line.a.y}
+                  x2={line.b.x}
+                  y2={line.b.y}
+                  vectorEffect="non-scaling-stroke"
+                />
+              );
+            })()}
 
-          {overlay}
-        </g>
-      </svg>
+            {/*
+              The placement ghost: what is about to be dropped, drawn where it would land.
+              An armed component is otherwise invisible on the canvas — the only sign is a lit
+              palette tile — so a click is a guess about both what and where. It is the real
+              drawing at the real snapped position rather than a box, because the two differ:
+              a component may hang around its origin instead of filling its instance box.
+            */}
+            {!drag && controller.tool === 'place' && controller.placeRef
+              ? (() => {
+                  if (!placement) return null;
+                  return (
+                    <RawGroup
+                      className="place-ghost"
+                      transform={`translate(${placement.pos.x} ${placement.pos.y})`}
+                      markup={placement.markup}
+                    />
+                  );
+                })()
+              : null}
 
-      <LabelEditor controller={controller} surfaceSize={size} />
-    </div>
+            {overlay}
+          </g>
+        </svg>
+
+        <LabelEditor controller={controller} surfaceSize={size} />
+      </div>
+    </>
   );
 }
 

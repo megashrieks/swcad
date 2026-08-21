@@ -94,6 +94,18 @@
   --sw-zone: var(--sw-ink-muted);
   --sw-selection: var(--sw-accent-2);
 
+  /*
+   * The coordinate gutters. Painted in the paper's own colour: the strip is part of the
+   * drawing surface, not a band of chrome around it, so only the rule along its inner edge
+   * and the ticks say where it ends.
+   */
+  --sw-ruler-bg: var(--sw-paper);
+  --sw-ruler-line: color-mix(in srgb, var(--sw-ink) 30%, var(--sw-ruler-bg));
+  --sw-ruler-ink: var(--sw-ink-muted);
+
+  /* Kept in step with `RULER_SIZE` in `CanvasLayers.tsx`, which sizes the canvases. */
+  --ruler-size: 20px;
+
   /* Overlay ink, now a view onto the canvas palette. */
   --sheet: var(--sw-paper);
   --ink-accent: var(--sw-accent-2);
@@ -411,6 +423,50 @@ body {
   touch-action: none;
   user-select: none;
   cursor: default;
+}
+
+/*
+ * With the gutters on, the drawing surface gives up the strip they occupy. Insetting the
+ * surface rather than floating the rulers over it keeps `getBoundingClientRect()` the one
+ * definition of screen space: pointer coordinates, the viewport size and every snap read
+ * from it stay correct with no gutter-sized correction sprinkled through the code.
+ */
+.surface.has-rulers {
+  inset: var(--ruler-size) 0 0 var(--ruler-size);
+}
+
+.ruler {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.ruler-top {
+  top: 0;
+  left: var(--ruler-size);
+}
+
+.ruler-left {
+  top: var(--ruler-size);
+  left: 0;
+}
+
+/* Where the two strips meet: the unit they are counting in. */
+.ruler-corner {
+  top: 0;
+  left: 0;
+  width: var(--ruler-size);
+  height: var(--ruler-size);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sw-ruler-bg);
+  border-right: 1px solid var(--sw-ruler-line);
+  border-bottom: 1px solid var(--sw-ruler-line);
+  font-size: 8px;
+  letter-spacing: 0.02em;
+  color: var(--sw-ruler-ink);
 }
 
 .surface.tool-pan {

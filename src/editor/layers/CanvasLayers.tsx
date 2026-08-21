@@ -153,6 +153,175 @@ export function GridLayer({
   return <canvas ref={ref} className="layer" style={{ width: w, height: h }} />;
 }
 
+/**
+ * Width of the coordinate gutters, in CSS pixels.
+ *
+ * The strips take layout space rather than floating over the drawing: `.surface` is inset
+ * by exactly this much, so its client rect — which every screen↔world mapping on the
+ * canvas is measured against — stays the single source of truth and needs no correction.
+ */
+export const RULER_SIZE = 20;
+
+const RULER_FONT = '9px Inter, "Segoe UI", sans-serif';
+/** Shortest run of pixels a number may claim before the ruler steps up a level. */
+const RULER_LABEL_PITCH = 58;
+/** Tick lengths, measured in from the edge the drawing is on. */
+const RULER_TICK_MINOR = 4;
+const RULER_TICK_MAJOR = 8;
+
+/** `-40`, `1.5` — a world coordinate, at the precision the sheet is drawn to. */
+function rulerLabel(value: number): string {
+  const rounded = Math.round(value * 100) / 100;
+  if (Number.isInteger(rounded)) return String(rounded);
+  return String(Number(rounded.toFixed(2)));
+}
+
+/**
+ * The coordinate gutters along the top and left edges.
+ *
+ * Both strips are one component because they are one reading of the viewport: the same
+ * step, the same lattice and the same origin, just projected onto the two axes. The step
+ * is taken from the grid rather than from round decimals, so a number on the ruler always
+ * names a line that is actually drawn — at a grid of 25 the ruler counts 0, 100, 200, not
+ * 0, 50, 100 — and it climbs by whole subdivisions as you zoom out, so a label never lands
+ * between lattice lines.
+ */
+export function RulerLayer({
+  grid,
+  viewport,
+  size,
+  extent,
+}: {
+  grid: GridConfig;
+  viewport: Viewport;
+  /** Size of the drawing surface — the strips run alongside it, not across it. */
+  size: Size;
+  /** World rect of the current selection, marked out on both strips. */
+  extent?: Rect | null;
+}): JSX.Element {
+  const topRef = useRef<HTMLCanvasElement>(null);
+  const leftRef = useRef<HTMLCanvasElement>(null);
+  const { tx, ty, zoom } = viewport;
+  const { w, h } = size;
+  const { size: gridSize, subdivisions } = grid;
+  const { x: originX, y: originY } = grid.origin;
+  const unit = grid.unit ?? '';
+  const exX = extent?.x ?? null;
+  const exY = extent?.y ?? null;
+  const exW = extent?.w ?? null;
+  const exH = extent?.h ?? null;
+
+  const palette = useCanvasPalette();
+  const bg = paletteColor(palette, '--sw-ruler-bg', '#f2f0ed');
+  const line = paletteColor(palette, '--sw-ruler-line', '#cfcac3');
+  const inkColor = paletteColor(palette, '--sw-ruler-ink', '#6b6660');
+  const markColor = paletteColor(palette, '--sw-selection', '#3b82f6');
+
+  useEffect(() => {
+    const top = topRef.current;
+    const left = leftRef.current;
+    if (!top || !left) return;
+    const topCtx = setupCanvas(top, { w, h: RULER_SIZE });
+    const leftCtx = setupCanvas(left, { w: RULER_SIZE, h });
+    if (!topCtx || !leftCtx) return;
+
+    const minor = gridSize / Math.max(1, subdivisions);
+    const climb = subdivisions > 1 ? subdivisions : 2;
+    // Ticks follow the finest lattice line the grid still draws, so the gutter and the
+    // drawing never disagree about what a tick is.
+    let step = minor > 0 ? minor : 1;
+    while (step * zoom < 6) step *= climb;
+    let major = step;
+    while (major * zoom < RULER_LABEL_PITCH) major *= climb;
+
+    const draw = (
+      ctx: CanvasRenderingContext2D,
+      horizontal: boolean,
+      length: number,
+      pan: number,
+      origin: number,
+      from: number | null,
+      span: number | null,
+    ): void => {
+      // Local coordinates run (along the strip, across it); `across` is measured from the
+      // outer edge, so the drawing is always at `RULER_SIZE`.
+      const at = (along: number, across: number): [number, number] =>
+        horizontal ? [along, across] : [across, along];
+      const rect = (u: number, v: number, du: number, dv: number): [number, number, number, number] =>
+        horizontal ? [u, v, du, dv] : [v, u, dv, du];
+
+      ctx.fillStyle = bg;
+      ctx.fillRect(...rect(0, 0, length, RULER_SIZE));
+
+      if (from !== null && span !== null && span >= 0) {
+        const a = from * zoom + pan;
+        const b = a + span * zoom;
+        ctx.save();
+        ctx.globalAlpha = 0.18;
+        ctx.fillStyle = markColor;
+        ctx.fillRect(...rect(a, 0, Math.max(b - a, 1), RULER_SIZE));
+        ctx.restore();
+      }
+
+      const worldFrom = (0 - pan) / zoom;
+      const worldTo = (length - pan) / zoom;
+      const start = Math.floor((worldFrom - origin) / step) * step + origin;
+
+      ctx.strokeStyle = line;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.fillStyle = inkColor;
+      ctx.font = RULER_FONT;
+      ctx.textBaseline = 'middle';
+      // Floating point walks off a lattice over a long strip; count in whole steps.
+      const count = Math.floor((worldTo - start) / step);
+      for (let i = 0; i <= count; i += 1) {
+        const world = start + i * step;
+        const s = crisp(world * zoom + pan);
+        // `major` is a whole number of steps, so testing the index avoids asking whether
+        // 149.99999 is a multiple of 50.
+        const isMajor = Math.abs(Math.round((world - origin) / major) * major + origin - world) < step / 100;
+        const tick = isMajor ? RULER_TICK_MAJOR : RULER_TICK_MINOR;
+        ctx.moveTo(...at(s, RULER_SIZE - tick));
+        ctx.lineTo(...at(s, RULER_SIZE));
+        if (!isMajor) continue;
+        const text = rulerLabel(world);
+        if (horizontal) {
+          ctx.textAlign = 'left';
+          ctx.fillText(text, s + 3, RULER_SIZE / 2 - 4);
+        } else {
+          // Rotated a quarter turn anticlockwise, so the numbers read up the strip and
+          // end just before the tick they belong to — the same "after the tick" placement
+          // the top strip uses, seen from the side.
+          ctx.save();
+          ctx.translate(RULER_SIZE / 2 - 4, s - 3);
+          ctx.rotate(-Math.PI / 2);
+          ctx.textAlign = 'right';
+          ctx.fillText(text, 0, 0);
+          ctx.restore();
+        }
+      }
+      // The rule the drawing starts at, drawn last so no tick overshoots it.
+      ctx.moveTo(...at(0, RULER_SIZE - 0.5));
+      ctx.lineTo(...at(length, RULER_SIZE - 0.5));
+      ctx.stroke();
+    };
+
+    draw(topCtx, true, w, tx, originX, exX, exW);
+    draw(leftCtx, false, h, ty, originY, exY, exH);
+  }, [tx, ty, zoom, w, h, gridSize, subdivisions, originX, originY, exX, exY, exW, exH, bg, line, inkColor, markColor]);
+
+  return (
+    <>
+      <canvas ref={topRef} className="ruler ruler-top" style={{ width: w, height: RULER_SIZE }} />
+      <canvas ref={leftRef} className="ruler ruler-left" style={{ width: RULER_SIZE, height: h }} />
+      <div className="ruler ruler-corner" aria-hidden="true">
+        {unit}
+      </div>
+    </>
+  );
+}
+
 const GUIDE_EDGE_MARGIN = 40;
 const MAX_SECONDARY_GUIDES_PER_AXIS = 40;
 

@@ -207,6 +207,8 @@ export class EditorController {
   revealAnnotations = false;
   /** The dashed box around a whole selected node. */
   showNodeOutline = true;
+  /** Coordinate gutters down the top and left edges of the canvas. */
+  showRulers = true;
   editingLabel: { nodeId: string; elementId: string } | null = null;
   lastError: string | null = null;
 

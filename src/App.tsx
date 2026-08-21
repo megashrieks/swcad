@@ -14,6 +14,7 @@ import {
   ImageIcon,
   MagnifyingGlassIcon,
   ResetIcon,
+  RulerSquareIcon,
   Share1Icon,
   TargetIcon,
   UpdateIcon,
@@ -284,6 +285,16 @@ export function App(): JSX.Element {
                 active={active.showPorts}
                 onClick={() => {
                   active.showPorts = !active.showPorts;
+                  active.notify();
+                }}
+              />
+              <IconButton
+                label="Rulers"
+                hint="Coordinate gutters along the top and left edges"
+                icon={<RulerSquareIcon />}
+                active={active.showRulers}
+                onClick={() => {
+                  active.showRulers = !active.showRulers;
                   active.notify();
                 }}
               />
