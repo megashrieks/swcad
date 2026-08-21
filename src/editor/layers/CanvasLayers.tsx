@@ -396,7 +396,9 @@ export function HighlightLayer({
     };
 
     // Secondaries drawn first (faint context), then the lines the geometry actually landed on:
-    // a soft halo under a brighter dashed line, so a hit reads instantly against the near-misses.
+    // the same dash twice, a soft wide pass under a bright narrow one, so a hit glows against
+    // the near-misses. The halo has to carry the dash as well — drawn solid it shows through
+    // every gap, and the line reads as a dashed stroke sitting on a continuous one.
     const hits = lines.filter((l) => l.primary);
     strokeLines(
       lines.filter((l) => !l.primary),
@@ -404,7 +406,7 @@ export function HighlightLayer({
       1,
       false,
     );
-    strokeLines(hits, guideWeakColor, 3, false);
+    strokeLines(hits, guideWeakColor, 3.5, true);
     strokeLines(hits, guideColor, 1.5, true);
     ctx.setLineDash([]);
 
