@@ -191,6 +191,9 @@ const MEASURE_TEXT_PAD = 5;
 /** Below this the bracket is more clutter than measurement. */
 const MEASURE_MIN_PX = 14;
 const MEASURE_MARGIN = 24;
+/** Line box of the label, and how far the guides are pushed off the bracket. */
+const MEASURE_LABEL_H = 12;
+const MEASURE_CLEAR = 2;
 
 /** `57`, or `57.5` — a distance in world units, at the precision a sheet is drawn to. */
 function measureLabel(distance: number): string {
@@ -199,37 +202,95 @@ function measureLabel(distance: number): string {
 }
 
 /**
- * One dimension bracket: `|<--- 57 --->|`, the same drawing turned on its side for a
- * vertical gap.
- *
- * Drawn in screen space so the caps, heads and label keep their size at any zoom — the
- * number is the thing being read, and a bracket that scaled with the drawing would be
- * unreadable at the zoom levels where spacing actually matters. All of it is laid out in
- * `(along, across)` and mapped at the end, so the vertical case is the same code.
+ * A bracket resolved to screen space, in `(along, across)` — `along` runs down the gap
+ * being measured, `across` is the offset from the line it is drawn on. Laying it out once
+ * lets the carve and the ink agree on where the drawing is without measuring text twice,
+ * and keeps the vertical case as the same code with the two mapped the other way round.
  */
-function drawMeasure(
+interface MeasureLayout {
+  horizontal: boolean;
+  a: number;
+  b: number;
+  mid: number;
+  label: string;
+  textW: number;
+  /** Whether the number sits in a break in the line, or above a line too short to break. */
+  inline: boolean;
+  role: Measure['role'];
+  at: (along: number, across: number) => [number, number];
+  box: (along0: number, across0: number, along1: number, across1: number) => [number, number, number, number];
+}
+
+/** Null when the bracket is off screen, or too short to be worth reading. */
+function layoutMeasure(
   ctx: CanvasRenderingContext2D,
   measure: Measure,
   viewport: Viewport,
   size: Size,
-  color: string,
-): void {
+): MeasureLayout | null {
   const { tx, ty, zoom } = viewport;
   const horizontal = measure.axis === 'x';
   const a = measure.from * zoom + (horizontal ? tx : ty);
   const b = measure.to * zoom + (horizontal ? tx : ty);
   const cross = measure.at * zoom + (horizontal ? ty : tx);
   const span = b - a;
-  if (!(span > MEASURE_MIN_PX)) return;
+  if (!(span > MEASURE_MIN_PX)) return null;
 
   const alongLimit = horizontal ? size.w : size.h;
   const crossLimit = horizontal ? size.h : size.w;
-  if (b < -MEASURE_MARGIN || a > alongLimit + MEASURE_MARGIN) return;
-  if (cross < -MEASURE_MARGIN || cross > crossLimit + MEASURE_MARGIN) return;
+  if (b < -MEASURE_MARGIN || a > alongLimit + MEASURE_MARGIN) return null;
+  if (cross < -MEASURE_MARGIN || cross > crossLimit + MEASURE_MARGIN) return null;
 
   const at = (along: number, across: number): [number, number] =>
     horizontal ? [along, cross + across] : [cross + across, along];
+  const box = (u0: number, v0: number, u1: number, v1: number): [number, number, number, number] => {
+    const [x0, y0] = at(u0, v0);
+    const [x1, y1] = at(u1, v1);
+    return [Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0)];
+  };
 
+  ctx.font = MEASURE_FONT;
+  const label = measureLabel(measure.distance);
+  const textW = ctx.measureText(label).width;
+
+  return {
+    horizontal,
+    a,
+    b,
+    mid: (a + b) / 2,
+    label,
+    textW,
+    inline: span >= textW + 2 * (MEASURE_TEXT_PAD + MEASURE_ARROW + 2),
+    role: measure.role,
+    at,
+    box,
+  };
+}
+
+/**
+ * The area a bracket needs to itself. Guides are full-height lines that would otherwise
+ * cross the caps and strike through the number — a measurement that cannot be read is
+ * worse than no measurement — so they are punched out here and the bracket drawn into the
+ * hole. Erasing rather than painting over keeps the grid below visible, since this layer
+ * is transparent everywhere it is not drawn on.
+ */
+function carveMeasure(ctx: CanvasRenderingContext2D, m: MeasureLayout): void {
+  const half = MEASURE_CAP + MEASURE_CLEAR;
+  ctx.fillRect(...m.box(m.a - MEASURE_CLEAR, -half, m.b + MEASURE_CLEAR, half));
+  if (m.inline) return;
+  const reach = m.textW / 2 + MEASURE_TEXT_PAD;
+  ctx.fillRect(...m.box(m.mid - reach, -half - MEASURE_LABEL_H, m.mid + reach, -half));
+}
+
+/**
+ * One dimension bracket: `|<--- 57 --->|`, the same drawing turned on its side for a
+ * vertical gap.
+ *
+ * Drawn in screen space so the caps, heads and label keep their size at any zoom — the
+ * number is the thing being read, and a bracket that scaled with the drawing would be
+ * unreadable at the zoom levels where spacing actually matters.
+ */
+function drawMeasure(ctx: CanvasRenderingContext2D, m: MeasureLayout, color: string): void {
   ctx.save();
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
@@ -237,25 +298,21 @@ function drawMeasure(
   ctx.setLineDash([]);
   // The gap being copied is context, not the answer, so it reads as an echo of the one
   // the pointer is making.
-  ctx.globalAlpha = measure.role === 'reference' ? 0.5 : 1;
+  ctx.globalAlpha = m.role === 'reference' ? 0.5 : 1;
 
   const segment = (u1: number, v1: number, u2: number, v2: number): void => {
-    const [x1, y1] = at(u1, v1);
-    const [x2, y2] = at(u2, v2);
+    const [x1, y1] = m.at(u1, v1);
+    const [x2, y2] = m.at(u2, v2);
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
   };
 
+  const { a, b, mid, textW } = m;
   ctx.font = MEASURE_FONT;
-  const label = measureLabel(measure.distance);
-  const textW = ctx.measureText(label).width;
-  const mid = (a + b) / 2;
-  const inline = span >= textW + 2 * (MEASURE_TEXT_PAD + MEASURE_ARROW + 2);
-
   ctx.beginPath();
   segment(a, -MEASURE_CAP, a, MEASURE_CAP);
   segment(b, -MEASURE_CAP, b, MEASURE_CAP);
-  if (inline) {
+  if (m.inline) {
     segment(a, 0, mid - textW / 2 - MEASURE_TEXT_PAD, 0);
     segment(mid + textW / 2 + MEASURE_TEXT_PAD, 0, b, 0);
   } else {
@@ -263,14 +320,14 @@ function drawMeasure(
   }
   ctx.stroke();
 
-  if (span > MEASURE_ARROW * 2 + 4) {
+  if (b - a > MEASURE_ARROW * 2 + 4) {
     for (const [tip, dir] of [
       [a, 1],
       [b, -1],
     ] as const) {
-      const [x0, y0] = at(tip, 0);
-      const [x1, y1] = at(tip + dir * MEASURE_ARROW, -3);
-      const [x2, y2] = at(tip + dir * MEASURE_ARROW, 3);
+      const [x0, y0] = m.at(tip, 0);
+      const [x1, y1] = m.at(tip + dir * MEASURE_ARROW, -3);
+      const [x2, y2] = m.at(tip + dir * MEASURE_ARROW, 3);
       ctx.beginPath();
       ctx.moveTo(x0, y0);
       ctx.lineTo(x1, y1);
@@ -280,13 +337,13 @@ function drawMeasure(
     }
   }
 
-  const [lx, ly] = at(mid, inline ? 0 : -7);
+  const [lx, ly] = m.at(mid, m.inline ? 0 : -MEASURE_CAP - MEASURE_CLEAR - MEASURE_LABEL_H / 2);
   ctx.translate(lx, ly);
   // A vertical dimension reads bottom-up, the way the connector captions do.
-  if (!horizontal) ctx.rotate(-Math.PI / 2);
+  if (!m.horizontal) ctx.rotate(-Math.PI / 2);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(label, 0, 0);
+  ctx.fillText(m.label, 0, 0);
   ctx.restore();
 }
 
@@ -351,7 +408,19 @@ export function HighlightLayer({
     strokeLines(hits, guideColor, 1.5, true);
     ctx.setLineDash([]);
 
-    for (const measure of measures) drawMeasure(ctx, measure, { tx, ty, zoom }, { w, h }, guideColor);
+    // Brackets take the space they need out of the guides before drawing into it: a guide
+    // running along a dimension line, or through its number, hides the measurement behind
+    // the thing that prompted it.
+    const brackets = measures
+      .map((measure) => layoutMeasure(ctx, measure, { tx, ty, zoom }, { w, h }))
+      .filter((m): m is MeasureLayout => m !== null);
+    if (brackets.length > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+      for (const bracket of brackets) carveMeasure(ctx, bracket);
+      ctx.restore();
+    }
+    for (const bracket of brackets) drawMeasure(ctx, bracket, guideColor);
   }, [tx, ty, zoom, w, h, guides, measures, active, guideColor, guideWeakColor]);
 
   return <canvas ref={ref} className="layer" style={{ width: w, height: h }} />;

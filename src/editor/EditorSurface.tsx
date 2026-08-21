@@ -436,17 +436,21 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
 
       if (leadOrigin && leadInfo) {
         const b = leadInfo.bounds;
-        const probes = {
-          xs: [b.x + dx, b.x + b.w / 2 + dx, b.x + b.w + dx, ...leadInfo.ports.map((p) => p.pos.x + dx)],
-          ys: [b.y + dy, b.y + b.h / 2 + dy, b.y + b.h + dy, ...leadInfo.ports.map((p) => p.pos.y + dy)],
-        };
+        // `leadInfo` describes the node where it sits *now*, part way through the drag,
+        // while `dx/dy` is measured from where the drag began. Mixing the two counts the
+        // distance already travelled twice, which sends the probes and the spacing search
+        // off to somewhere the node has never been. What they do share is the node's
+        // transform, so the geometry is carried over as an offset from it.
+        const offset = { x: b.x - leadInfo.node.transform.x, y: b.y - leadInfo.node.transform.y };
         const target = { x: leadOrigin.transform.x + dx, y: leadOrigin.transform.y + dy };
-        const snapped = controller.snap(target, drag.nodeIds, probes, {
-          x: b.x + dx,
-          y: b.y + dy,
-          w: b.w,
-          h: b.h,
-        });
+        const box = { x: target.x + offset.x, y: target.y + offset.y, w: b.w, h: b.h };
+        const shiftX = target.x - leadInfo.node.transform.x;
+        const shiftY = target.y - leadInfo.node.transform.y;
+        const probes = {
+          xs: [box.x, box.x + b.w / 2, box.x + b.w, ...leadInfo.ports.map((p) => p.pos.x + shiftX)],
+          ys: [box.y, box.y + b.h / 2, box.y + b.h, ...leadInfo.ports.map((p) => p.pos.y + shiftY)],
+        };
+        const snapped = controller.snap(target, drag.nodeIds, probes, box);
         adjustX = dx + (snapped.pos.x - target.x);
         adjustY = dy + (snapped.pos.y - target.y);
         controller.guides = snapped.guides;

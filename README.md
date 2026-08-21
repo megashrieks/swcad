@@ -133,7 +133,9 @@ the node's own, so both are drawn at full strength.
 A gap is only compared against things sharing a band with it — a horizontal gap needs the two
 items to overlap vertically — so a bracket always belongs to a row or a column instead of
 measuring across the whole sheet. At most one pair is drawn per axis; the point is to show a
-match, not to dimension the drawing.
+match, not to dimension the drawing. Alignment guides are full-height lines and would otherwise
+run along a dimension line or strike through its number, so they give way: the guides are cut
+back around each bracket, leaving it in clear space.
 
 Against the other snaps, an equal gap beats the grid but loses to alignment: being level with
 something is a stronger statement than being evenly spaced from it, and if both are available at
