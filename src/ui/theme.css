@@ -558,6 +558,14 @@ body {
   vector-effect: non-scaling-stroke;
 }
 
+/* What the place tool is about to drop, drawn where it would land. Faint enough to read as
+   a proposal rather than as part of the drawing, and never a pointer target — the click it
+   is previewing has to reach the canvas underneath. */
+.place-ghost {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
 /* Sits exactly on top of the label it edits: no padding, border, ring or background, so
    nothing shifts the glyphs and nothing frames the text while you type. The label
    underneath is hidden while it is open (see `nodeMarkup`), so there is nothing to cover. */

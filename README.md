@@ -104,6 +104,21 @@ A node's `rotation` turns it about the middle of its box, so a rotated shape kee
 instead of swinging around its top-left corner. The pivot is resolved by the graph (never stored in
 the document) and is honoured by ports, anchors, bounds, export and the compiler.
 
+## Placing
+
+Picking a component from the palette arms it; the next click on the sheet drops it. While it is
+armed the editor draws a **ghost** — the component itself, faint, at the position it would land,
+snapped exactly as the drop will be. Nothing else on the canvas says what is armed or where it
+would go, so without it a click is a guess about both. It is the real drawing rather than an
+outline box because the two differ: a component may hang off its origin instead of filling its
+instance box, and a script may draw something no box describes.
+
+The ghost costs a repaint only when it would actually move, so with snapping on it repaints once
+per grid cell rather than once per pixel. Connectors arm the same way but draw no ghost — they are
+made by dragging between ports, not by a click, so there is no landing position to preview.
+
+`Escape` puts the tool away; holding `Shift` while dropping keeps it armed for the next one.
+
 ## Selecting
 
 Selection follows the drawing, never the box around it.

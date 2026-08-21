@@ -21,7 +21,7 @@ import { pickGroupMember, portGroupIds } from '@core/model/graph';
 import type { Node } from '@core/model/types';
 import type { EditorController, DragState, ToolId } from './EditorController';
 import { GridLayer, HighlightLayer } from './layers/CanvasLayers';
-import { connectionMarkup, nodeMarkup, nodeTransform } from './render';
+import { connectionMarkup, nodeMarkup, nodeTransform, previewMarkup } from './render';
 
 export interface EditorSurfaceProps {
   controller: EditorController;
@@ -133,6 +133,9 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
   const hostRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const spaceRef = useRef(false);
+  // Where the placement ghost last sat, so a pointer move only forces a repaint once the
+  // ghost would actually move — with snapping on that is once per grid cell, not per pixel.
+  const ghostRef = useRef<Vec | null>(null);
 
   useLayoutEffect(() => {
     const host = hostRef.current;
@@ -368,11 +371,18 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
       const port = controller.portAt(world, controller.tool === 'connect');
       const hit = port ? null : pickAt(event.clientX, event.clientY);
       const nextHover = hit?.id ?? null;
-      if (nextHover !== controller.hoverId || port?.id !== controller.hoverPort?.id) {
-        controller.hoverId = nextHover;
-        controller.hoverPort = port;
-        controller.notify();
+      let changed = nextHover !== controller.hoverId || port?.id !== controller.hoverPort?.id;
+      controller.hoverId = nextHover;
+      controller.hoverPort = port;
+
+      const ghost =
+        controller.tool === 'place' && controller.placeRef ? controller.snap(world).pos : null;
+      if (ghost?.x !== ghostRef.current?.x || ghost?.y !== ghostRef.current?.y) {
+        ghostRef.current = ghost;
+        changed = true;
       }
+
+      if (changed) controller.notify();
       return;
     }
 
@@ -455,6 +465,7 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
     // Nothing is under the pointer once it leaves the sheet, so drop the hover state that
     // keeps port markers and the placement ghost alive.
     if (controller.drag) return;
+    ghostRef.current = null;
     if (controller.cursorWorld === null && controller.hoverPort === null && controller.hoverId === null) return;
     controller.cursorWorld = null;
     controller.hoverPort = null;
@@ -895,6 +906,29 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
               />
             );
           })()}
+
+          {/*
+            The placement ghost: what is about to be dropped, drawn where it would land.
+            An armed component is otherwise invisible on the canvas — the only sign is a lit
+            palette tile — so a click is a guess about both what and where. It is the real
+            drawing at the real snapped position rather than a box, because the two differ:
+            a component may hang around its origin instead of filling its instance box.
+          */}
+          {!drag && controller.tool === 'place' && controller.placeRef
+            ? (() => {
+                const entry = controller.registry.get(controller.placeRef);
+                const at = controller.cursorWorld;
+                if (!entry || !at || entry.def.connector) return null;
+                const pos = controller.snap(at).pos;
+                return (
+                  <RawGroup
+                    className="place-ghost"
+                    transform={`translate(${pos.x} ${pos.y})`}
+                    markup={previewMarkup(entry, controller.registry).markup}
+                  />
+                );
+              })()
+            : null}
 
           {overlay}
         </g>
