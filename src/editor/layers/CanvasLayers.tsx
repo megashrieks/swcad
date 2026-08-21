@@ -197,6 +197,16 @@ const MEASURE_MARGIN = 24;
 const MEASURE_LABEL_H = 12;
 const MEASURE_CLEAR = 2;
 
+/**
+ * The dash every hint on this layer is drawn with, in phase with the screen origin.
+ *
+ * A guide and a dimension line meet whenever a box is centred on the gap it is measuring,
+ * so they are drawn in the same pattern from the same origin: the run of dashes carries on
+ * across the bracket instead of turning into a different kind of line halfway.
+ */
+const HINT_DASH = [5, 4];
+const HINT_DASH_PERIOD = HINT_DASH[0] + HINT_DASH[1];
+
 /** `57`, or `57.5` — a distance in world units, at the precision a sheet is drawn to. */
 function measureLabel(distance: number): string {
   const rounded = Math.round(distance * 10) / 10;
@@ -292,7 +302,7 @@ function carveMeasure(ctx: CanvasRenderingContext2D, m: MeasureLayout): void {
  * number is the thing being read, and a bracket that scaled with the drawing would be
  * unreadable at the zoom levels where spacing actually matters.
  */
-function drawMeasure(ctx: CanvasRenderingContext2D, m: MeasureLayout, color: string): void {
+function drawMeasure(ctx: CanvasRenderingContext2D, m: MeasureLayout, color: string, weak: string): void {
   ctx.save();
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
@@ -311,16 +321,41 @@ function drawMeasure(ctx: CanvasRenderingContext2D, m: MeasureLayout, color: str
 
   const { a, b, mid, textW } = m;
   ctx.font = MEASURE_FONT;
+
+  // The caps are solid: they are the ends of the measurement, not a coordinate.
   ctx.beginPath();
   segment(a, -MEASURE_CAP, a, MEASURE_CAP);
   segment(b, -MEASURE_CAP, b, MEASURE_CAP);
-  if (m.inline) {
-    segment(a, 0, mid - textW / 2 - MEASURE_TEXT_PAD, 0);
-    segment(mid + textW / 2 + MEASURE_TEXT_PAD, 0, b, 0);
-  } else {
-    segment(a, 0, b, 0);
-  }
   ctx.stroke();
+
+  // The dimension line is drawn as a guide is — same dash, same phase, same soft pass
+  // under a bright one — because half the time it is lying on one. A solid line there
+  // reads as the guide having been swallowed by the bracket.
+  const runs: [number, number][] = m.inline
+    ? [
+        [a, mid - textW / 2 - MEASURE_TEXT_PAD],
+        [mid + textW / 2 + MEASURE_TEXT_PAD, b],
+      ]
+    : [[a, b]];
+  ctx.setLineDash(HINT_DASH);
+  for (const [pass, width] of [
+    [weak, 2.5],
+    [color, 1],
+  ] as const) {
+    ctx.strokeStyle = pass;
+    ctx.lineWidth = width;
+    for (const [u1, u2] of runs) {
+      if (u2 <= u1) continue;
+      ctx.lineDashOffset = ((u1 % HINT_DASH_PERIOD) + HINT_DASH_PERIOD) % HINT_DASH_PERIOD;
+      ctx.beginPath();
+      segment(u1, 0, u2, 0);
+      ctx.stroke();
+    }
+  }
+  ctx.setLineDash([]);
+  ctx.lineDashOffset = 0;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
 
   if (b - a > MEASURE_ARROW * 2 + 4) {
     for (const [tip, dir] of [
@@ -388,7 +423,7 @@ export function HighlightLayer({
       if (subset.length === 0) return;
       ctx.strokeStyle = color;
       ctx.lineWidth = width;
-      ctx.setLineDash(dashed ? [5, 4] : []);
+      ctx.setLineDash(dashed ? HINT_DASH : []);
       ctx.beginPath();
       for (const line of subset) {
         const at = crisp(line.screen);
@@ -463,7 +498,7 @@ export function HighlightLayer({
       for (const bracket of brackets) carveMeasure(ctx, bracket);
       ctx.restore();
     }
-    for (const bracket of brackets) drawMeasure(ctx, bracket, guideColor);
+    for (const bracket of brackets) drawMeasure(ctx, bracket, guideColor, guideWeakColor);
   }, [tx, ty, zoom, w, h, guides, measures, obstacles, ink, active, guideColor, guideWeakColor]);
 
   return <canvas ref={ref} className="layer" style={{ width: w, height: h }} />;
