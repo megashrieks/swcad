@@ -133,14 +133,22 @@ is the same rule with no third component involved — both gaps are the node's o
 
 A gap is only compared against things sharing a band with it — a horizontal gap needs the two
 items to overlap vertically — so a bracket always belongs to a row or a column instead of
-measuring across the whole sheet. At most one pair is drawn per axis; the point is to show a
-match, not to dimension the drawing. Alignment guides are full-height lines and would otherwise
+measuring across the whole sheet. Every gap on screen that matches is drawn, not just the nearest
+one, and the gaps looked at are every gap in the viewport rather than only the ones in the row
+being worked on: while a grid is laid out the row in hand is usually the empty one, and the
+rhythm worth copying is two rows up. Dropping the last tile of a grid therefore lights up the
+whole grid, which is the point — the reassurance is *they are all the same*, and one lonely
+bracket cannot say that. Alignment guides are full-height lines and would otherwise
 run along a dimension line or strike through its number, so they give way: the guides are cut
 back around each bracket, leaving it in clear space. The dimension line is then drawn the way a
 guide is — same dash, same phase, same soft pass under a bright one — because a box centred on
 the gap it is measuring puts the two on top of each other, and a solid line there reads as the
 guide having been swallowed. The caps and the arrow heads stay solid: they are the ends of a
 measurement, not a claim about a coordinate.
+
+Dragging several things at once measures and lines up the **selection**, not whichever member the
+pointer happened to grab: the group's outline is what is being moved and what you can see, so its
+edges, its centre and every port in it are what the guides and the brackets are computed from.
 
 Against the other snaps, an equal gap beats the grid but loses to alignment: being level with
 something is a stronger statement than being evenly spaced from it, and if both are available at
@@ -165,6 +173,13 @@ The dragged node probes with the same box it publishes, so what lights up is sym
 A component can overrule the rule with an [`align` annotation](docs/authoring-components.md):
 `{ "kind": "align", "snap": false }` on a painted decoration keeps it out of the guides, and
 `"snap": true` on invisible geometry puts it in.
+
+Where several guides are in reach, the one that wins is the one that lines up the **most** things
+at once, not the nearest one. A stroked box advertises its ink edge and the port on that edge half
+a stroke apart, so the closest guide is often a lone cross-family coincidence — port against
+edge — while a shift a fraction further puts edge on edge, centre on centre, port on port and far
+edge on far edge together. Taking the nearest one lands a box three quarters of a unit off its
+row, which is invisible but enough to break the rhythm and the dimension brackets with it.
 
 A guide runs the full height of the sheet because it is a claim about a coordinate, not about a
 stretch of empty space — but it has nothing to say where something is already drawn. So the

@@ -60,9 +60,9 @@ const SNAP_TOLERANCE_PX = 7;
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 8;
 const GUIDE_CAP_PER_AXIS = 64;
-/** How far around the moving box to look for a rhythm to copy, in screen pixels. */
+/** Fallback reach around the moving box before the surface has been measured, in screen pixels. */
 const SPACING_REACH_PX = 900;
-const SPACING_PEER_CAP = 96;
+const SPACING_PEER_CAP = 256;
 /** Anything thinner is two components touching rather than a gap. */
 const SPACING_MIN_GAP = 1;
 /** Coordinates are indexed to a thousandth of a unit; anything closer than this is "on the line". */
@@ -603,11 +603,34 @@ export class EditorController {
     };
   }
 
-  /** Node bounds near the moving box, as candidates for a gap worth repeating. */
+  /**
+   * Node bounds to look for a rhythm in: everything on screen.
+   *
+   * A gap is worth matching because you can see it, so what is visible is the natural
+   * limit — and it is the useful one while a grid is laid out, where the row being worked
+   * on is empty and the rhythm to copy is two rows up. Falls back to a reach around the
+   * box before the surface has been measured.
+   */
   private spacingPeers(box: Rect, exclude: ReadonlySet<string>): Rect[] {
     const graph = this.getGraph();
-    const reach = SPACING_REACH_PX / this.viewport.zoom;
-    const area = { x: box.x - reach, y: box.y - reach, w: box.w + reach * 2, h: box.h + reach * 2 };
+    const { tx, ty, zoom } = this.viewport;
+    const { w, h } = this.viewSize;
+    let area: Rect;
+    if (w > 0 && h > 0) {
+      const view = { x: -tx / zoom, y: -ty / zoom, w: w / zoom, h: h / zoom };
+      // Unioned with the box so a node dragged past the edge still sees what it is next to.
+      const x0 = Math.min(view.x, box.x);
+      const y0 = Math.min(view.y, box.y);
+      area = {
+        x: x0,
+        y: y0,
+        w: Math.max(view.x + view.w, box.x + box.w) - x0,
+        h: Math.max(view.y + view.h, box.y + box.h) - y0,
+      };
+    } else {
+      const reach = SPACING_REACH_PX / zoom;
+      area = { x: box.x - reach, y: box.y - reach, w: box.w + reach * 2, h: box.h + reach * 2 };
+    }
     const out: Rect[] = [];
     for (const id of this.engine.spatial.query(area)) {
       if (exclude.has(id)) continue;
@@ -1044,10 +1067,20 @@ export function onLattice(value: number, step: number, origin: number): boolean 
 }
 
 /**
- * Nearest alignment candidate that is actually usable. With snap-to-grid on we
- * skip candidates that would land the node between grid lines: aligning to an
- * off-lattice edge is how a single stray coordinate used to propagate across the
- * whole sheet.
+ * The alignment candidate worth taking.
+ *
+ * Nearest is not the same as best. A component publishes several coordinates that sit a
+ * hair apart — a stroked box advertises its ink edge and the port on that edge half a
+ * stroke inside it — so the closest guide is often a lone cross-family coincidence, while a
+ * shift a fraction further lands the edge on the edge, the centre on the centre, the port
+ * on the port and the far edge on the far edge all at once. Landing on four things is
+ * plainly the placement meant, and it is the one that keeps a row on its rhythm, so
+ * candidates are scored by how many coordinates their shift satisfies and only tie-broken
+ * on distance (the list arrives nearest-first).
+ *
+ * With snap-to-grid on, candidates that would land the node between grid lines are skipped
+ * first: aligning to an off-lattice edge is how a single stray coordinate used to propagate
+ * across the whole sheet.
  */
 function pickAxisCandidate(
   candidates: GuideCandidate[],
@@ -1056,8 +1089,20 @@ function pickAxisCandidate(
   step: number,
   origin: number,
 ): GuideCandidate | null {
-  if (!gridActive) return candidates[0] ?? null;
-  return candidates.find((c) => onLattice(raw + c.delta, step, origin)) ?? null;
+  const eligible = gridActive
+    ? candidates.filter((c) => onLattice(raw + c.delta, step, origin))
+    : candidates;
+  let best: GuideCandidate | null = null;
+  let bestScore = -1;
+  for (const c of eligible) {
+    let score = 0;
+    for (const other of candidates) if (landsOn(other, c.delta)) score += 1;
+    if (score > bestScore) {
+      best = c;
+      bestScore = score;
+    }
+  }
+  return best;
 }
 
 /** Picks between the nearest alignment guide and the grid, biasing towards alignment. */

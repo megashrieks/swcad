@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { Rect, Vec } from '@core/geometry/index';
-import { rectFromPoints } from '@core/geometry/index';
+import { rectFromPoints, rectUnion } from '@core/geometry/index';
 import { outlineAttach, outlinePath } from '@core/geometry/outline';
 import type { Change } from '@core/model/store';
 import { bindTarget } from '@core/model/bind';
@@ -444,24 +444,32 @@ export function EditorSurface({ controller, underlay, overlay, fitKey, fitMaxZoo
       let adjustY = dy;
 
       if (leadOrigin && leadInfo) {
-        const b = leadInfo.bounds;
         // `leadInfo` describes the node where it sits *now*, part way through the drag,
         // while `dx/dy` is measured from where the drag began. Mixing the two counts the
         // distance already travelled twice, which sends the probes and the spacing search
         // off to somewhere the node has never been. What they do share is the node's
         // transform, so the geometry is carried over as an offset from it.
-        const offset = { x: b.x - leadInfo.node.transform.x, y: b.y - leadInfo.node.transform.y };
         const target = { x: leadOrigin.transform.x + dx, y: leadOrigin.transform.y + dy };
-        const box = { x: target.x + offset.x, y: target.y + offset.y, w: b.w, h: b.h };
         const shiftX = target.x - leadInfo.node.transform.x;
         const shiftY = target.y - leadInfo.node.transform.y;
+        // Every dragged node travels by the same delta, so one shift carries the whole
+        // selection, and a group lines up and spaces itself by its outline — what you see
+        // being dragged — rather than by whichever node the pointer happened to grab.
+        const moving: ResolvedNodeInfo[] = [];
+        for (const id of drag.nodeIds) {
+          const info = graph.nodes.get(id);
+          if (info) moving.push(info);
+        }
+        const shift = (r: Rect): Rect => ({ x: r.x + shiftX, y: r.y + shiftY, w: r.w, h: r.h });
+        const box = shift(moving.reduce((acc, i) => rectUnion(acc, i.bounds), moving[0].bounds));
         // Edges and centre come from the painted box, which is what the rest of the sheet
         // publishes to line up with — probing with the bounds instead would offer a caption's
         // edge to a drawing that never advertises one.
-        const a = leadInfo.alignBox;
+        const a = shift(moving.reduce((acc, i) => rectUnion(acc, i.alignBox), moving[0].alignBox));
+        const ports = moving.flatMap((i) => i.ports);
         const probes = {
-          xs: [a.x + shiftX, a.x + a.w / 2 + shiftX, a.x + a.w + shiftX, ...leadInfo.ports.map((p) => p.pos.x + shiftX)],
-          ys: [a.y + shiftY, a.y + a.h / 2 + shiftY, a.y + a.h + shiftY, ...leadInfo.ports.map((p) => p.pos.y + shiftY)],
+          xs: [a.x, a.x + a.w / 2, a.x + a.w, ...ports.map((p) => p.pos.x + shiftX)],
+          ys: [a.y, a.y + a.h / 2, a.y + a.h, ...ports.map((p) => p.pos.y + shiftY)],
         };
         const snapped = controller.snap(target, drag.nodeIds, probes, box);
         adjustX = dx + (snapped.pos.x - target.x);
