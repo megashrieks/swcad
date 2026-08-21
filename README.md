@@ -398,6 +398,12 @@ entry object, which the registry replaces whenever a library loads or a componen
 
 ## Connector routing
 
+Picking a connector from the palette arms it and switches to the connect tool, the same way
+picking a node arms the place tool — the next drag between two ports draws *that* connector, and
+it stays armed until the tool changes, because connecting is a mode and one association is rarely
+the only one. The toolbar's own connect button clears the arming, so it always means the plain
+`base/arrow`.
+
 A connector is drawn by one of three routers, picked from the toolbar's **Routing** group or
 from `Routing` in the inspector:
 

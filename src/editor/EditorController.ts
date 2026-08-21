@@ -549,7 +549,22 @@ export class EditorController {
     return node;
   }
 
-  connect(from: Endpoint, to: Endpoint, componentRef = 'base/arrow'): Connection {
+  /**
+   * The component a new connection is drawn with: whichever connector the palette has
+   * armed, or the plain arrow.
+   *
+   * Picking a connector from the palette sets `placeRef` and switches to the connect tool,
+   * exactly as picking a node arms the place tool — but a connection is made by dragging
+   * between ports rather than by a click on the canvas, so the drag has to read the ref
+   * back out. It stays armed until the tool changes, because connecting is a mode: one
+   * association is rarely the only one.
+   */
+  get connectorRef(): string {
+    const entry = this.placeRef ? this.registry.get(this.placeRef) : null;
+    return entry?.def.connector ? entry.ref : 'base/arrow';
+  }
+
+  connect(from: Endpoint, to: Endpoint, componentRef = this.connectorRef): Connection {
     const entry = this.registry.get(componentRef);
     const params: Record<string, unknown> = {};
     for (const def of entry?.def.params ?? []) params[def.name] = def.default;
