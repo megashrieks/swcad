@@ -1,5 +1,5 @@
 import type { ResolvedGraph } from '@core/model/graph';
-import type { LegendConfig, PageConfig, SwDocument } from '@core/model/types';
+import type { Endpoint, LegendConfig, PageConfig, SwDocument } from '@core/model/types';
 import type { LibraryRegistry } from '@core/library/registry';
 import { resolveThemeColorsIn, type ResolvedPalette } from '@core/theme/palette';
 import { paletteColor, readCanvasPalette } from '../ui/canvasPalette';
@@ -19,6 +19,19 @@ export interface ExportOptions {
   palette?: ResolvedPalette;
 }
 
+/**
+ * A connector belongs to an export of a selection only when both of its ends do. This
+ * decides what is drawn *and* what the picture is cropped to: crop to every connector on
+ * the sheet and exporting one node hands back a page of empty paper around it.
+ */
+function exported(info: { conn: { from: Endpoint; to: Endpoint } }, only?: Set<string>): boolean {
+  if (!only) return true;
+  for (const end of [info.conn.from, info.conn.to]) {
+    if (end.kind !== 'free' && !only.has(end.nodeId)) return false;
+  }
+  return true;
+}
+
 function contentBounds(graph: ResolvedGraph, only?: Set<string>): { x: number; y: number; w: number; h: number } {
   let minX = Infinity;
   let minY = Infinity;
@@ -35,6 +48,7 @@ function contentBounds(graph: ResolvedGraph, only?: Set<string>): { x: number; y
     add(info.bounds);
   }
   for (const info of graph.connections.values()) {
+    if (!exported(info, only)) continue;
     for (const p of info.points) add({ x: p.x, y: p.y, w: 0, h: 0 });
   }
   if (!Number.isFinite(minX)) return { x: 0, y: 0, w: 100, h: 100 };
@@ -62,14 +76,7 @@ export function exportSvg(
   if (doc.page && !options.only) parts.push(pageFrameMarkup(doc.page, palette));
 
   for (const info of graph.connections.values()) {
-    if (options.only) {
-      const from = info.conn.from;
-      const to = info.conn.to;
-      const fromId = 'nodeId' in from ? from.nodeId : null;
-      const toId = 'nodeId' in to ? to.nodeId : null;
-      if (fromId && !options.only.has(fromId)) continue;
-      if (toId && !options.only.has(toId)) continue;
-    }
+    if (!exported(info, options.only)) continue;
     parts.push(`<g>${connectionMarkup(info)}</g>`);
   }
   for (const id of doc.nodeOrder) {
