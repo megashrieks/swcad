@@ -223,6 +223,11 @@ export interface LoadedLibrary {
   components: Record<string, ComponentDef>;
   scripts: Record<string, string>;
   shared: Record<string, string>;
+  /**
+   * Project-wide plugin scripts, keyed by their path inside the library
+   * (`plugins/<name>.js`). Every `.js` file under `plugins/` is one plugin.
+   */
+  plugins?: Record<string, string>;
   /** Raw package files, keyed by component id. */
   sources?: Record<string, ComponentSource>;
   /** Per-component load failures, keyed by path. */

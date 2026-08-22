@@ -1,17 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CheckIcon,
-  CodeIcon,
   Component1Icon,
   CornersIcon,
   CursorArrowIcon,
   DotFilledIcon,
   ExclamationTriangleIcon,
   FileIcon,
-  FileTextIcon,
   GridIcon,
   HandIcon,
-  ImageIcon,
   MagnifyingGlassIcon,
   ResetIcon,
   RulerSquareIcon,
@@ -27,7 +24,7 @@ import { SheetEditor } from './sheet/SheetEditor';
 import { ComponentEditor, type ComponentSession } from './component/ComponentEditor';
 import { confirmAndDelete } from './component/storage';
 import type { ComponentEntry } from '@core/library/registry';
-import { downloadPng, downloadText, exportBackground, exportSvg, printPdf } from './editor/export';
+import { PluginToolbar } from './editor/PluginToolbar';
 import { ButtonGroup } from './ui/ButtonGroup';
 import { IconButton } from './ui/IconButton';
 import { RouteCurveIcon, RouteOrthogonalIcon, RouteStraightIcon } from './ui/icons';
@@ -161,18 +158,6 @@ export function App(): JSX.Element {
   const saveState = editingComponent
     ? SAVE_STATES[session.established ? session.saveStatus : 'pending']
     : SAVE_STATES[project.saveStatus];
-  // Export follows the canvas on screen: on a sheet that is the sheet, in the component
-  // editor it is the component being drawn.
-  const activeDoc = (active ?? controller).store.getDocument();
-  const svgOf = (onlySelection: boolean): string =>
-    active
-      ? exportSvg(activeDoc, active.getGraph(), active.registry, {
-          only: onlySelection && active.selection.size > 0 ? new Set(active.selection) : undefined,
-        })
-      : '';
-  const baseName = (activeDoc.meta.title || (mode === 'component' ? 'component' : 'sheet'))
-    .replace(/[^a-z0-9-_]+/gi, '-')
-    .toLowerCase();
 
   return (
     <div className="app">
@@ -300,31 +285,7 @@ export function App(): JSX.Element {
               />
             </ButtonGroup>
 
-            <ButtonGroup label="Export">
-              <IconButton
-                label="Export SVG"
-                icon={<CodeIcon />}
-                onClick={() => downloadText(`${baseName}.svg`, svgOf(active.selection.size > 0))}
-              />
-              <IconButton
-                label="Export PNG"
-                icon={<ImageIcon />}
-                onClick={() =>
-                  void downloadPng(
-                    `${baseName}.png`,
-                    svgOf(active.selection.size > 0),
-                    2,
-                    exportBackground(activeDoc),
-                  )
-                }
-              />
-              <IconButton
-                label="Export PDF"
-                hint="Print to PDF"
-                icon={<FileTextIcon />}
-                onClick={() => printPdf(svgOf(false), activeDoc.meta.title || baseName)}
-              />
-            </ButtonGroup>
+            <PluginToolbar host={project.plugins} controller={active} mode={mode} />
           </>
         ) : null}
 

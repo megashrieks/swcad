@@ -1,0 +1,6 @@
+{
+  "id": "export",
+  "name": "Export",
+  "version": "1.0.0",
+  "description": "Project-wide plugin: draw the sheet out as SVG, PNG or PDF."
+}

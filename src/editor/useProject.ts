@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LibraryRegistry } from '@core/library/registry';
+import { PluginHost } from '@core/plugin/host';
 import { GraphEngine } from '@core/model/graph';
 import { DocumentStore } from '@core/model/store';
 import { api, type ProjectPayload } from '@core/io/client';
@@ -18,6 +19,8 @@ export interface ProjectSession {
   registry: LibraryRegistry;
   engine: GraphEngine;
   controller: EditorController;
+  /** Project-wide plugins, compiled from the loaded libraries. */
+  plugins: PluginHost;
   dirty: boolean;
   /** What auto-save is doing right now. */
   saveStatus: SaveStatus;
@@ -38,6 +41,7 @@ export function useProject(initialPath?: string): ProjectSession {
   const store = useMemo(() => new DocumentStore(emptyDocument()), []);
   const engine = useMemo(() => new GraphEngine(store, registry), [store, registry]);
   const controller = useMemo(() => new EditorController(store, registry, engine), [store, registry, engine]);
+  const plugins = useMemo(() => new PluginHost(registry), [registry]);
 
   const [status, setStatus] = useState<ProjectSession['status']>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -204,6 +208,7 @@ export function useProject(initialPath?: string): ProjectSession {
     registry,
     engine,
     controller,
+    plugins,
     dirty,
     saveStatus: save.status,
     saveError: save.error,

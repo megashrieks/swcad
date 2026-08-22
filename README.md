@@ -53,7 +53,8 @@ ref or a file the package does not have are rewritten to what is actually on scr
 | Connectors | Port-to-port with live preview, waypoints, straight/orthogonal/curve routers. The orthogonal router is an A* search that runs along the document's grid lines where it can (and an obstacle-derived lattice where it can't), so connectors staircase around obstacles instead of cutting through them. Endpoints follow the nodes they are attached to |
 | Attachment | Any node can be pinned to another node's `anchor`; cycles are detected |
 | Component editor | The sheet editor, pointed at a component's document. It opens on a picker — everything in the project on one side, the templates on the other — rather than inventing a blank component. Draw with the `meta` palette of primitives and annotation markers; the inspector shows the properties of whatever you picked, because what you picked is an ordinary node. The remaining package files (manifest, scripts) are edited as text beside the canvas |
-| Export | SVG, PNG, and print-to-PDF; scripts are evaluated at export time and the legend is included |
+| Export | SVG, PNG, and print-to-PDF; scripts are evaluated at export time and the legend is included. Delivered as a plugin: one **Export** button with the variants under its caret |
+| Plugins | A library can also ship `plugins/*.js` — sandboxed scripts that act on the whole drawing and put commands in the toolbar. `libs/align` (auto-alignment) and `libs/export` are the two that ship. See [docs/plugins.md](docs/plugins.md) |
 | Dialogs | Questions are asked in the app's own modal — `window.alert`/`confirm`/`prompt` are not used anywhere. Destructive answers are red, Escape and the backdrop mean cancel, focus moves in and comes back, and a second question queues behind the first |
 
 ## Layout
@@ -316,6 +317,7 @@ whole length — counts as body-sized whatever its size, so the select tool can 
       script.js             optional behaviour
       README.md             optional notes
     shared/<name>.js        importable from scripts via ctx.require('lib:name')
+    plugins/<name>.js       optional project-wide plugin — a toolbar command
 ```
 
 A component drawn as raw markup replaces `document.json` with `shape.svg` (its viewBox sets the
@@ -356,6 +358,42 @@ against a document it no longer describes. Deleting `.swcad/` only costs undo de
 
 The component editor is separate — component packages are still saved explicitly, so a half-typed
 script is never hot-reloaded into the sheet.
+
+## Plugins
+
+A component script decides how one part draws itself. A **plugin** acts on the whole drawing and
+puts commands in the toolbar. It is one sandboxed `.js` file in any library's `plugins/` folder:
+
+```js
+definePlugin({
+  title: 'Align',
+  commands: [{
+    id: 'align.auto', label: 'Align', icon: 'align',
+    run: (ctx) => { for (const n of ctx.nodes) ctx.moveBy(n.id, ctx.snapToGrid(n.x) - n.x, 0); },
+    items: [ /* entries under the caret */ ],
+  }],
+});
+```
+
+Two ship with the app:
+
+- **Align** — the default action lines up whatever is nearly lined up already: it clusters the
+  edges and centres that sit within half a grid cell of each other and makes them exactly equal,
+  then puts everything back on the lattice. It works on the selection when two or more things are
+  selected, and on the whole sheet otherwise. Explicit align-to-edge, equal-gap distribution and
+  plain snap-to-grid live under the caret. Locked and attached nodes are never moved.
+- **Export** — SVG on the button (the selection if there is one), PNG at 2× or 4× and print-to-PDF
+  under the caret.
+
+A command that carries `items` is drawn as a split button: the main half is the default action,
+the caret opens the rest. Everything one command changes is a single undo entry.
+
+Plugins see a flat snapshot of the drawing (`ctx.nodes`, `ctx.connections`, `ctx.selection`,
+`ctx.grid`) and mutate it through `move`/`moveBy`/`resize`/`rotate`/`setParam`/`remove`/`select`.
+They cannot reach the DOM, the network or the filesystem; drawing the sheet out and talking to
+the user are capabilities the app lends them (`ctx.svg`, `ctx.download`, `ctx.downloadPng`,
+`ctx.print`, `ctx.notify`). A plugin that fails to compile does not take the toolbar with it — its
+error is collected behind a warning button. Full reference: [docs/plugins.md](docs/plugins.md).
 
 ## Base library
 
@@ -679,6 +717,7 @@ npm run preview    standalone Node server over dist/
 
 - [Authoring components](docs/authoring-components.md) — the component package format and every annotation kind
 - [Scripting API](docs/scripting-api.md) — the sandbox and the full `ctx` surface
+- [Plugins](docs/plugins.md) — project-wide commands in the toolbar
 
 ## Known limits
 

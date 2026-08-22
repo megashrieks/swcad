@@ -135,6 +135,7 @@ async function loadLibrary(libDir) {
   const components = {};
   const scripts = {};
   const shared = {};
+  const plugins = {};
   const sources = {};
   const errors = {};
 
@@ -174,6 +175,7 @@ async function loadLibrary(libDir) {
       }
     } else if (rel.startsWith('scripts/')) scripts[rel] = await fsp.readFile(abs, 'utf8');
     else if (rel.startsWith('shared/')) shared[rel] = await fsp.readFile(abs, 'utf8');
+    else if (rel.startsWith('plugins/') && rel.endsWith('.js')) plugins[rel] = await fsp.readFile(abs, 'utf8');
   }
 
   return {
@@ -181,6 +183,7 @@ async function loadLibrary(libDir) {
     components: orderComponents(components, manifest.components),
     scripts,
     shared,
+    plugins,
     sources,
     errors: Object.keys(errors).length ? errors : undefined,
     dir: path.relative(appRoot, libDir).split(path.sep).join('/'),

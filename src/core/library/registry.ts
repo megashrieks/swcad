@@ -14,6 +14,16 @@ export interface ComponentEntry {
   source: ComponentSource | null;
 }
 
+/** A plugin script as it sits on disk, before it is compiled. */
+export interface PluginSource {
+  libId: string;
+  libName: string;
+  /** Path inside the library, e.g. `plugins/align.js`. */
+  path: string;
+  source: string;
+  readOnly: boolean;
+}
+
 /** Parse `lib/comp` or `lib/comp@1.2.0`. */
 export function parseRef(ref: string): { libId: string; compId: string; version: string | null } {
   const [base, version = null] = ref.split('@');
@@ -108,6 +118,24 @@ export class LibraryRegistry {
 
   library(id: string): LoadedLibrary | null {
     return this.libs.get(id) ?? null;
+  }
+
+  /** Every plugin script in every loaded library, in library order. */
+  plugins(): PluginSource[] {
+    const out: PluginSource[] = [];
+    for (const lib of this.libs.values()) {
+      for (const [path, source] of Object.entries(lib.plugins ?? {})) {
+        if (typeof source !== 'string' || source.trim() === '') continue;
+        out.push({
+          libId: lib.manifest.id,
+          libName: lib.manifest.name || lib.manifest.id,
+          path,
+          source,
+          readOnly: Boolean(lib.readOnly),
+        });
+      }
+    }
+    return out;
   }
 
   /** Source of a `shared/<name>.js` module, addressed as `lib:name` from scripts. */

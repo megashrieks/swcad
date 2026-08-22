@@ -75,20 +75,25 @@ function makeScope(bindings: Record<string, unknown>): Record<string, unknown> {
 }
 
 /**
- * Compile a component script. The script registers itself by calling
- * `defineComponent({ render, style, ports })`.
+ * Compile a script that registers itself by calling a single define function —
+ * `defineComponent({...})` for components, `definePlugin({...})` for plugins. A script
+ * that returns an object literal instead is accepted too.
  */
-export function compileScript(source: string, host: SandboxHost): CompiledScript {
-  let registered: ScriptModule | null = null;
-  const defineComponent = (mod: ScriptModule): void => {
-    if (!mod || typeof mod !== 'object') throw new TypeError('defineComponent expects an object');
+export function compileSandboxed<T extends object>(
+  source: string,
+  host: SandboxHost,
+  defineName: string,
+): { module: T | null; error: string | null } {
+  let registered: T | null = null;
+  const define = (mod: T): void => {
+    if (!mod || typeof mod !== 'object') throw new TypeError(`${defineName} expects an object`);
     registered = mod;
   };
 
   const bindings: Record<string, unknown> = {
     ...safeGlobals(host),
     ...host.api,
-    defineComponent,
+    [defineName]: define,
   };
 
   try {
@@ -99,14 +104,22 @@ export function compileScript(source: string, host: SandboxHost): CompiledScript
       `with (__scope) { return (function () {\n'use strict';\n${source}\n})(); }`,
     ) as (scope: unknown) => unknown;
     const returned = factory(makeScope(bindings));
-    if (!registered && returned && typeof returned === 'object') registered = returned as ScriptModule;
-    if (!registered) {
-      return { module: {}, source, error: 'script did not call defineComponent(...)' };
-    }
-    return { module: registered, source, error: null };
+    const mod: T | null =
+      registered ?? (returned && typeof returned === 'object' ? (returned as T) : null);
+    if (!mod) return { module: null, error: `script did not call ${defineName}(...)` };
+    return { module: mod, error: null };
   } catch (err) {
-    return { module: {}, source, error: err instanceof Error ? err.message : String(err) };
+    return { module: null, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/**
+ * Compile a component script. The script registers itself by calling
+ * `defineComponent({ render, style, ports })`.
+ */
+export function compileScript(source: string, host: SandboxHost): CompiledScript {
+  const { module, error } = compileSandboxed<ScriptModule>(source, host, 'defineComponent');
+  return { module: module ?? {}, source, error };
 }
 
 export interface CallResult<T> {
