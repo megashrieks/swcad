@@ -6,6 +6,8 @@ import {
   AlignLeftIcon,
   AlignRightIcon,
   AlignTopIcon,
+  ArrowDownIcon,
+  ArrowRightIcon,
   CodeIcon,
   DotFilledIcon,
   DownloadIcon,
@@ -13,6 +15,7 @@ import {
   FileTextIcon,
   GridIcon,
   ImageIcon,
+  LayoutIcon,
   MagicWandIcon,
   SpaceEvenlyHorizontallyIcon,
   SpaceEvenlyVerticallyIcon,
@@ -39,6 +42,9 @@ import { showAlert } from '../ui/Dialog';
  */
 const PLUGIN_ICONS: Record<string, JSX.Element> = {
   align: <MagicWandIcon />,
+  layout: <LayoutIcon />,
+  'arrow-down': <ArrowDownIcon />,
+  'arrow-right': <ArrowRightIcon />,
   'align-left': <AlignLeftIcon />,
   'align-right': <AlignRightIcon />,
   'align-top': <AlignTopIcon />,

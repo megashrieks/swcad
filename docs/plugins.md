@@ -67,8 +67,8 @@ A plugin cannot hand over a React element and has no business knowing which icon
 draws from, so it names one:
 
 `align`, `align-left`, `align-right`, `align-top`, `align-bottom`, `align-center-h`,
-`align-center-v`, `distribute-h`, `distribute-v`, `grid`, `download`, `code`, `image`,
-`document`, `warning`.
+`align-center-v`, `distribute-h`, `distribute-v`, `grid`, `layout`, `arrow-down`,
+`arrow-right`, `download`, `code`, `image`, `document`, `warning`.
 
 An unknown name falls back to a neutral dot. Add new names to `PLUGIN_ICONS` in
 `src/editor/PluginToolbar.tsx`.
@@ -147,10 +147,34 @@ reload.
 
 ## Worked example
 
-`libs/align/plugins/align.js` is the reference implementation. The interesting part is that
-clustering reads `bounds` (the painted box, so the *edges* line up) while the grid rounding is
-applied to `x`/`y` (the position, which is what dragging snaps), so a node dropped after an
-auto-align does not jump:
+`libs/align/plugins/align.js` is the reference implementation, and the one place a plugin reads
+the *shape* of the drawing rather than its coordinates. `Arrange` is a layered graph layout: it
+turns `ctx.connections` into a graph, reverses whatever closes a loop, ranks the nodes along the
+flow, orders each rank to cut connector crossings, and only then works out coordinates.
+
+Two details are worth copying.
+
+**Line things up by the painted shape, keep them apart by everything it paints.** `bounds` is the
+box the eye reads, so that is what is centred on a rank. The room a component needs is the union
+of `bounds` and `extent` — measured separately on each side of the centre, because a caption
+hangs off the bottom only:
+
+```js
+const left = Math.min(b.x, e.x);
+const right = Math.max(b.x + b.w, e.x + e.w);
+const room = { back: cx - left, front: right - cx };
+```
+
+Note what is *not* in there: the instance box `x/y/w/h`. A component may draw wherever it likes
+inside its box and many ignore it altogether — every `software/*` icon paints the same size no
+matter how the instance was sized — so reserving the box leaves a slab of empty space beside one
+part and none beside the next, and a rank of mixed sizes reads as randomly spaced. Space two
+neighbours by their facing halves plus a fixed gap and the clear space between them is the same
+all the way along, whatever sizes they are.
+
+**Round positions, not the boxes you lined up.** Clustering and centring read `bounds`; the grid
+rounding is applied to `x`/`y`, which is what dragging snaps, so a node dropped afterwards does
+not jump:
 
 ```js
 const settle = (node, delta) => {
@@ -159,5 +183,10 @@ const settle = (node, delta) => {
   return ctx.snapToGrid(pos) - node.x;
 };
 ```
+
+That leaves one trap. Rounding each position on its own moves each part by its own amount, so a
+gap can come out a whole cell wider than the one beside it. Work in whole cells — round each
+gap up to `ctx.grid.step`, and round the offset between a node's position and its painted centre
+too — and the whole rank rounds by the same amount, keeping the spacing the layout worked out.
 
 `libs/export/plugins/export.js` is the smaller one: five entries, all of them one line.

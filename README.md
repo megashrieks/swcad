@@ -54,7 +54,7 @@ ref or a file the package does not have are rewritten to what is actually on scr
 | Attachment | Any node can be pinned to another node's `anchor`; cycles are detected |
 | Component editor | The sheet editor, pointed at a component's document. It opens on a picker — everything in the project on one side, the templates on the other — rather than inventing a blank component. Draw with the `meta` palette of primitives and annotation markers; the inspector shows the properties of whatever you picked, because what you picked is an ordinary node. The remaining package files (manifest, scripts) are edited as text beside the canvas |
 | Export | SVG, PNG, and print-to-PDF; scripts are evaluated at export time and the legend is included. Delivered as a plugin: one **Export** button with the variants under its caret |
-| Plugins | A library can also ship `plugins/*.js` — sandboxed scripts that act on the whole drawing and put commands in the toolbar. `libs/align` (auto-alignment) and `libs/export` are the two that ship. See [docs/plugins.md](docs/plugins.md) |
+| Plugins | A library can also ship `plugins/*.js` — sandboxed scripts that act on the whole drawing and put commands in the toolbar. `libs/align` (**Arrange**: a layered graph layout that untangles a drawing by following its connectors, plus the smaller alignment tools) and `libs/export` are the two that ship. See [docs/plugins.md](docs/plugins.md) |
 | Dialogs | Questions are asked in the app's own modal — `window.alert`/`confirm`/`prompt` are not used anywhere. Destructive answers are red, Escape and the backdrop mean cancel, focus moves in and comes back, and a second question queues behind the first |
 
 ## Layout
@@ -366,9 +366,9 @@ puts commands in the toolbar. It is one sandboxed `.js` file in any library's `p
 
 ```js
 definePlugin({
-  title: 'Align',
+  title: 'Arrange',
   commands: [{
-    id: 'align.auto', label: 'Align', icon: 'align',
+    id: 'align.arrange', label: 'Arrange', icon: 'layout',
     run: (ctx) => { for (const n of ctx.nodes) ctx.moveBy(n.id, ctx.snapToGrid(n.x) - n.x, 0); },
     items: [ /* entries under the caret */ ],
   }],
@@ -377,11 +377,22 @@ definePlugin({
 
 Two ship with the app:
 
-- **Align** — the default action lines up whatever is nearly lined up already: it clusters the
-  edges and centres that sit within half a grid cell of each other and makes them exactly equal,
-  then puts everything back on the lattice. It works on the selection when two or more things are
-  selected, and on the whole sheet otherwise. Explicit align-to-edge, equal-gap distribution and
-  plain snap-to-grid live under the caret. Locked and attached nodes are never moved.
+- **Arrange** — the default action untangles the drawing by reading its connectors, not its
+  coordinates. It builds a graph from the connections, reverses whatever closes a loop, sorts the
+  components into ranks along the direction the drawing already flows, orders each rank so that as
+  few connectors cross as possible, and spaces the ranks out so long connectors run straight.
+  Space is measured edge to edge from everything a component paints, captions included, while
+  things are lined up by the painted shape — so the clear gap between one part and the next is the
+  same all the way along whatever sizes they are. The instance box is deliberately left out of
+  that measurement: a component may draw anywhere inside it, and reserving a box a component does
+  not fill leaves a slab of empty space beside one part and none beside the next. Separate
+  diagrams on one sheet stay separate, and anything with no connectors is packed into a block out
+  of the way.
+  Under the caret: a fixed downward or rightward flow, **Tidy up** (the gentle one — it clusters
+  the edges and centres that sit within half a grid cell of each other and makes them exactly
+  equal, without moving anything far), align-to-edge, equal-gap distribution and snap-to-grid.
+  It works on the selection when two or more things are selected, and on the whole sheet
+  otherwise. Locked and attached nodes are never moved.
 - **Export** — SVG on the button (the selection if there is one), PNG at 2× or 4× and print-to-PDF
   under the caret.
 

@@ -1,6 +1,6 @@
 {
   "id": "align",
-  "name": "Align",
-  "version": "1.0.0",
-  "description": "Project-wide plugin: tidy a drawing up — cluster near-equal edges and centres onto one line, spread things evenly, or drop everything back onto the grid."
+  "name": "Arrange",
+  "version": "1.1.0",
+  "description": "Project-wide plugin: untangle a drawing by laying it out along its connectors, and the smaller tools — tidy near-equal edges onto one line, spread things evenly, or drop everything back onto the grid."
 }
